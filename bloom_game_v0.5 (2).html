@@ -1,0 +1,3599 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Bloom Game 🌸 v0.5</title>
+<style>
+/* ── RESET ───────────────────────────────────────────────── */
+* { box-sizing: border-box; margin: 0; padding: 0; touch-action: manipulation; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  min-height: 100vh;
+  background: linear-gradient(170deg, #4CAF50 0%, #388E3C 45%, #5D4037 100%);
+  display: flex; flex-direction: column; align-items: center;
+  overflow-x: hidden; user-select: none; -webkit-tap-highlight-color: transparent;
+}
+html, body { height: 100%; }
+#app { width: 100%; max-width: 430px; height: 100vh; height: 100dvh; display: flex; flex-direction: column; position: relative; overflow: hidden; }
+
+/* ── TOP BAR ─────────────────────────────────────────────── */
+#topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px clamp(8px,3vw,16px);
+  padding-top: max(10px, env(safe-area-inset-top));
+  background: rgba(0,0,0,0.32); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  border-bottom: 2px solid rgba(255,255,255,0.18);
+  position: relative; z-index: 10; flex-shrink: 0;
+}
+#clock-display { font-size: clamp(15px,4.5vw,20px); font-weight: 800; color: #fff; letter-spacing: 1.5px; text-shadow: 0 2px 6px rgba(0,0,0,0.45); font-variant-numeric: tabular-nums; flex-shrink:0; }
+#topbar-right { display: flex; align-items: center; gap: clamp(4px,1.5vw,6px); flex-wrap: nowrap; min-width:0; }
+#coins-display { font-size: clamp(11px,3.2vw,14px); font-weight: 800; color: #fde047; text-shadow: 0 1px 4px rgba(0,0,0,0.5); display: flex; align-items: center; gap: 3px; white-space:nowrap; }
+#fragments-display { font-size: clamp(10px,3vw,13px); font-weight: 800; color: #5eead4; text-shadow: 0 1px 4px rgba(0,0,0,0.5); display: flex; align-items: center; gap: 3px; white-space:nowrap; }
+#autosell-indicator {
+  display: none; font-size: 10px; font-weight: 800; color: #4ade80;
+  background: rgba(22,163,74,0.25); border: 1.5px solid #4ade80;
+  border-radius: 8px; padding: 3px 6px;
+}
+#autosell-indicator.visible { display: block; }
+
+/* ── MAIN SCROLL ─────────────────────────────────────────── */
+#main-content { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 12px 12px calc(90px + env(safe-area-inset-bottom)); gap: 14px; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
+.section-label { font-size: 12px; font-weight: 800; letter-spacing: 0.8px; text-transform: uppercase; color: rgba(255,255,255,0.9); margin-bottom: 7px; text-shadow: 0 1px 4px rgba(0,0,0,0.35); display:flex; align-items:center; gap:8px; }
+
+/* ── FIELD TABS ──────────────────────────────────────────── */
+#field-tabs { display: flex; gap: 8px; margin-bottom: 9px; }
+.field-tab-btn {
+  flex: 1; padding: 9px 6px; border-radius: 12px; border: 2px solid rgba(255,255,255,0.25);
+  background: rgba(255,255,255,0.1); color: #fff; font-family: inherit; font-weight: 800;
+  font-size: 12px; cursor: pointer; transition: all 0.15s;
+}
+.field-tab-btn:active { transform: scale(0.95); }
+.field-tab-btn.active { background: rgba(74,222,128,0.32); border-color: #4ade80; box-shadow: 0 0 10px rgba(74,222,128,0.4); }
+.field-tab-btn.locked { opacity: 0.55; }
+
+/* ── GARDEN ──────────────────────────────────────────────── */
+#garden-grid { display: grid; gap: 8px; }
+.plot {
+  border-radius: 14px; aspect-ratio: 1; min-height: 0; min-width: 0; max-width: 100%;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  cursor: pointer; position: relative; overflow: hidden;
+  border: 2.5px solid transparent;
+  transition: transform 0.1s, box-shadow 0.15s; will-change: transform;
+}
+.plot:active { transform: scale(0.91); }
+.plot.empty   { background: rgba(101,67,33,0.68); border-color: rgba(60,35,10,0.5); }
+.plot.planted { background: rgba(76,48,16,0.75); border-color: rgba(50,30,8,0.6); }
+.plot.ready   { background: rgba(21,128,61,0.62); border-color: #fde047; animation: readyGlow 1.6s ease-in-out infinite; }
+@keyframes readyGlow {
+  0%,100% { box-shadow: 0 0 0 2px #fbbf24, 0 0 12px rgba(251,191,36,0.5); }
+  50%      { box-shadow: 0 0 0 2px #fbbf24, 0 0 26px rgba(251,191,36,0.9); }
+}
+.plot.tool-target { border-color: #22d3ee !important; box-shadow: 0 0 0 2px #22d3ee, 0 0 16px rgba(34,211,238,0.5) !important; animation: none !important; }
+.plot.prismatic-plot { position: relative; z-index: 1; }
+.plot.prismatic-plot::before {
+  content: ''; position: absolute; inset: -3px; border-radius: 16px; z-index: -1;
+  background: conic-gradient(red,orange,yellow,lime,cyan,blue,violet,red);
+  animation: rainbowSpin 3s linear infinite; filter: blur(1.5px);
+}
+@keyframes rainbowSpin { 0%{ filter: blur(1.5px) hue-rotate(0deg); } 100%{ filter: blur(1.5px) hue-rotate(360deg); } }
+.plot-emoji { font-size: clamp(18px, 6.5vw, 28px); line-height: 1; }
+.plot-name  { font-size: clamp(7px, 2.1vw, 9px); color: rgba(255,255,255,0.9); margin-top: 2px; max-width: 88%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.plot-ready-badge { font-size: clamp(7px, 2vw, 9px); color: #fde047; font-weight: 800; margin-top: 1px; }
+.plot-dirt  { font-size: clamp(15px, 5vw, 22px); opacity: 0.35; }
+.plot-prog-wrap { position: absolute; bottom: 5px; left: 7px; right: 7px; height: 5px; background: rgba(0,0,0,0.3); border-radius: 3px; overflow: hidden; }
+.plot-prog-bar  { height: 100%; background: linear-gradient(90deg, #4ade80, #22d3ee); border-radius: 3px; will-change: width; }
+.plot-timer     { position: absolute; top: 4px; right: 5px; font-size: 8.5px; font-weight: 700; color: rgba(255,255,255,0.85); background: rgba(0,0,0,0.3); border-radius: 4px; padding: 1px 4px; }
+.plot-boost-icon{ position: absolute; top: 4px; left: 5px; font-size: 10px; }
+
+/* shimmering text for prismatic plant names */
+.shimmer-text {
+  background: linear-gradient(90deg,#f472b6,#facc15,#4ade80,#38bdf8,#a78bfa,#f472b6);
+  background-size: 300% 100%; -webkit-background-clip: text; background-clip: text; color: transparent;
+  animation: shimmerMove 2.6s linear infinite; font-weight: 800;
+}
+@keyframes shimmerMove { 0%{ background-position: 0% 50%; } 100%{ background-position: 300% 50%; } }
+
+/* ── TOOLS ───────────────────────────────────────────────── */
+#tools-row { display: flex; gap: 10px; }
+.tool-btn {
+  flex: 1; padding: 11px 6px 9px;
+  border: 2.5px solid rgba(255,255,255,0.35); border-radius: 14px;
+  background: rgba(255,255,255,0.18); cursor: pointer;
+  font-family: inherit; font-size: 12px; font-weight: 700;
+  color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,0.4);
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  transition: all 0.15s;
+}
+.tool-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+.tool-btn.active { background: rgba(250,204,21,0.35); border-color: #fbbf24; box-shadow: 0 0 0 2px #fbbf24, 0 0 14px rgba(251,191,36,0.55); }
+.tool-btn:not(:disabled):active { transform: scale(0.93); }
+.tool-emoji { font-size: 28px; }
+.tool-count { font-size: 13px; font-weight: 800; }
+.tool-label { font-size: 10px; opacity: 0.85; }
+#collect-all-btn {
+  width: 100%; margin-top: 9px; padding: 11px;
+  background: linear-gradient(135deg, #16a34a, #15803d);
+  border: 2px solid rgba(74,222,128,0.5); border-radius: 14px;
+  color: #fff; font-family: inherit; font-size: 14px; font-weight: 800;
+  cursor: pointer; text-shadow: 0 1px 3px rgba(0,0,0,0.3);
+  box-shadow: 0 3px 12px rgba(22,163,74,0.35); transition: all 0.15s;
+}
+#collect-all-btn:active { transform: scale(0.96); opacity: 0.85; }
+
+/* ── INVENTORY ───────────────────────────────────────────── */
+/* min-width:0 on grid items + container prevents the classic CSS Grid
+   "blowout" bug where a long unbreakable word (e.g. "Призматическая")
+   forces its track to grow past 1fr, making that one cell huge. */
+#inventory-grid { display: grid; grid-template-columns: repeat(5, minmax(0,1fr)); gap: 7px; }
+.inv-slot {
+  background: rgba(255,255,255,0.18); border: 2px solid rgba(255,255,255,0.28);
+  border-radius: 12px; aspect-ratio: 1; min-height: 0; min-width: 0; max-width: 100%;
+  position: relative; overflow: hidden;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  cursor: pointer; transition: all 0.12s; padding: 2px;
+}
+.inv-slot.empty { cursor: default; opacity: 0.32; }
+.inv-slot.seed-selected { border-color: #4ade80; box-shadow: 0 0 0 2px #4ade80, 0 0 10px rgba(74,222,128,0.5); background: rgba(74,222,128,0.2); }
+.inv-slot:not(.empty):active { transform: scale(0.9); }
+.inv-slot.prismatic-item { position: relative; z-index: 1; }
+.inv-slot.prismatic-item::before {
+  content: ''; position: absolute; inset: -2px; border-radius: 14px; z-index: -1;
+  background: conic-gradient(red,orange,yellow,lime,cyan,blue,violet,red);
+  animation: rainbowSpin 3s linear infinite; filter: blur(1px);
+}
+.inv-emoji { font-size: clamp(16px, 5.5vw, 22px); line-height: 1; }
+.inv-count { font-size: clamp(8px, 2.2vw, 9px); color: rgba(255,255,255,0.95); font-weight: 800; }
+.inv-name  { font-size: clamp(6.5px, 1.9vw, 7.5px); color: rgba(255,255,255,0.72); text-align: center; max-width: 95%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ── SIDE BUTTONS (left=Items, right=Shop) ───────────────── */
+.side-btn {
+  position: fixed; top: 50%; z-index: 50;
+  color: #fff; font-size: 20px;
+  display: flex; flex-direction: column; align-items: center; gap: 5px;
+  transition: padding 0.15s; cursor: pointer;
+}
+.side-btn:active { transform: translateY(-50%) scale(0.94) !important; }
+.side-btn-label { font-size: 9px; font-weight: 700; color: rgba(255,255,255,0.9); writing-mode: vertical-rl; letter-spacing: 1px; text-transform: uppercase; }
+
+#shop-arrow-btn {
+  right: 0; transform: translateY(-50%);
+  background: linear-gradient(135deg, #f97316, #ef4444);
+  border: 2px solid rgba(255,255,255,0.4); border-right: none;
+  border-radius: 12px 0 0 12px; padding: 16px 10px;
+  box-shadow: -3px 0 14px rgba(0,0,0,0.25);
+}
+
+/* ── PANELS (shared styles) ──────────────────────────────── */
+.side-panel {
+  position: fixed; top: 0; height: 100%; width: 100%; max-width: 430px;
+  z-index: 100; overflow: hidden;
+  display: flex; flex-direction: column;
+}
+.panel-header {
+  padding: 14px 16px 12px; background: rgba(255,255,255,0.07);
+  border-bottom: 1px solid rgba(255,255,255,0.12);
+  display: flex; align-items: center; gap: 10px;
+}
+.panel-title    { color: #fff; font-size: 19px; font-weight: 800; flex: 1; }
+.panel-coins    { color: #fde047; font-size: 14px; font-weight: 800; }
+.panel-close-btn {
+  background: rgba(255,255,255,0.12); border: 1.5px solid rgba(255,255,255,0.25);
+  border-radius: 9px; color: #fff; font-family: inherit;
+  font-size: 13px; font-weight: 700; padding: 6px 13px; cursor: pointer;
+}
+.panel-close-btn:active { background: rgba(255,255,255,0.25); }
+.panel-body { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 14px; display: flex; flex-direction: column; gap: 14px; }
+
+/* ── MAIN SHOP PANEL (slides from RIGHT) ─────────────────── */
+#shop-panel {
+  right: -105%; transition: right 0.3s cubic-bezier(0.25,0.8,0.25,1);
+  background: linear-gradient(160deg, #1e1b4b 0%, #0f172a 100%);
+  border-left: 2px solid rgba(255,255,255,0.12);
+}
+#shop-panel.open { right: 0; }
+.shop-section-label { font-size: 11px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; color: rgba(255,255,255,0.5); margin-bottom: 9px; display:flex; align-items:center; gap:6px; }
+
+/* Shop: Plot upgrade */
+.shop-upgrade-card {
+  background: linear-gradient(135deg, rgba(101,67,33,0.55), rgba(78,42,10,0.75));
+  border: 2px solid #a16207; border-radius: 16px; padding: 14px 16px;
+  display: flex; align-items: center; gap: 14px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.35); margin-bottom: 10px;
+}
+.upgrade-icon  { font-size: 36px; flex-shrink:0; }
+.upgrade-info  { flex: 1; }
+.upgrade-title { font-size: 13px; font-weight: 800; color: #fde047; margin-bottom: 2px; }
+.upgrade-level { font-size: 10px; color: rgba(255,255,255,0.5); margin-bottom: 4px; }
+.upgrade-next  { font-size: 10.5px; color: #fde047; font-weight: 800; }
+
+.field2-card {
+  background: linear-gradient(135deg, rgba(14,116,144,0.5), rgba(3,68,94,0.7));
+  border: 2px solid #22d3ee; border-radius: 16px; padding: 14px 16px;
+  display: flex; align-items: center; gap: 14px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.35);
+}
+
+/* Shop: Tool cards */
+#shop-tools-row { display: flex; gap: 10px; }
+.shop-tool-card {
+  flex: 1; border-radius: 16px; padding: 16px 8px;
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.3);
+}
+.shop-tool-card.water-card  { background: linear-gradient(135deg, #0c4a6e, #075985); border: 2px solid #38bdf8; }
+.shop-tool-card.shovel-card { background: linear-gradient(135deg, #44240a, #6b3a1f); border: 2px solid #a16207; }
+.shop-tool-emoji  { font-size: 38px; }
+.shop-tool-name   { font-size: 13px; color: #fff; font-weight: 800; }
+.shop-tool-price  { font-size: 11px; color: #fde047; font-weight: 800; }
+.shop-tool-stock  { font-size: 10px; color: rgba(255,255,255,0.5); }
+
+/* Buy button */
+.buy-btn {
+  background: linear-gradient(135deg, #f97316, #ef4444);
+  border: none; border-radius: 9px; color: #fff;
+  font-family: inherit; font-size: 11px; font-weight: 800;
+  padding: 7px 15px; cursor: pointer; margin-top: 3px;
+  box-shadow: 0 2px 8px rgba(239,68,68,0.4);
+  transition: opacity 0.15s, transform 0.1s;
+}
+.buy-btn:disabled { opacity: 0.35; cursor: not-allowed; box-shadow: none; }
+.buy-btn:not(:disabled):active { transform: scale(0.93); }
+.buy-btn.green-btn  { background: linear-gradient(135deg, #16a34a, #15803d); box-shadow: 0 2px 8px rgba(22,163,74,0.4); }
+.buy-btn.brown-btn  { background: linear-gradient(135deg, #92400e, #78350f); box-shadow: 0 2px 8px rgba(120,53,15,0.4); }
+.buy-btn.cyan-btn   { background: linear-gradient(135deg, #0891b2, #0e7490); box-shadow: 0 2px 8px rgba(8,145,178,0.4); }
+.buy-btn.purple-btn { background: linear-gradient(135deg, #7c3aed, #5b21b6); box-shadow: 0 2px 8px rgba(124,58,237,0.4); }
+
+/* Crate cards (3 types) */
+#shop-crates-row { display: flex; gap: 8px; }
+.crate-card {
+  flex: 1; border-radius: 16px; padding: 13px 6px;
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.3); cursor: pointer; transition: transform 0.1s; position: relative;
+}
+.crate-card:active { transform: scale(0.93); }
+.crate-card.crate-free  { background: linear-gradient(135deg,#166534,#14532d); border: 2px solid #4ade80; }
+.crate-card.crate-paid  { background: linear-gradient(135deg,#4c1d95,#6d28d9); border: 2px solid #a78bfa; }
+.crate-card.crate-xp    { background: linear-gradient(135deg,#9a3412,#c2410c); border: 2px solid #fb923c; }
+.crate-card.disabled    { opacity: 0.45; cursor: not-allowed; }
+.crate-emoji { font-size: 32px; }
+.crate-name  { font-size: 11px; color: #fff; font-weight: 800; text-align: center; }
+.crate-sub   { font-size: 9px; color: rgba(255,255,255,0.65); text-align: center; }
+.crate-info-btn { position: absolute; top: 6px; right: 7px; font-size: 13px; cursor: pointer; opacity: 0.7; }
+
+/* Lootboxes */
+#shop-lootboxes-row { display: flex; gap: 10px; }
+.lootbox-card {
+  flex: 1; background: linear-gradient(135deg, #4c1d95, #6d28d9);
+  border: 2px solid #a78bfa; border-radius: 16px; padding: 14px 8px;
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  cursor: pointer; box-shadow: 0 4px 18px rgba(109,40,217,0.4);
+  transition: transform 0.1s; position: relative;
+}
+
+/* Seed rows */
+#shop-seeds-grid { display: flex; flex-direction: column; gap: 8px; perspective: 600px; }
+.shop-seed-row {
+  border-radius: 14px; padding: 11px 13px;
+  display: flex; align-items: center; gap: 11px;
+  box-shadow: 0 3px 10px rgba(0,0,0,0.3);
+}
+.shop-seed-row.rarity-common    { background: linear-gradient(135deg, rgba(55,65,81,0.8), rgba(31,41,55,0.9)); border: 1.5px solid rgba(156,163,175,0.45); }
+.shop-seed-row.rarity-rare      { background: linear-gradient(135deg, rgba(30,58,138,0.7), rgba(29,78,216,0.5)); border: 1.5px solid rgba(96,165,250,0.65); }
+.shop-seed-row.rarity-epic      { background: linear-gradient(135deg, rgba(76,29,149,0.7), rgba(109,40,217,0.5)); border: 1.5px solid rgba(167,139,250,0.7); }
+.shop-seed-row.rarity-legendary { background: linear-gradient(135deg, rgba(120,53,15,0.7), rgba(146,64,14,0.6)); border: 2px solid rgba(251,191,36,0.85); box-shadow: 0 0 14px rgba(251,191,36,0.3); }
+.shop-seed-row.sold-out         { background: rgba(30,30,40,0.6); border: 1.5px solid rgba(100,100,120,0.3); opacity: 0.5; pointer-events: none; }
+.shop-seed-emoji { font-size: 28px; min-width: 34px; text-align: center; }
+.shop-seed-info  { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.shop-seed-name  { font-size: 13px; color: #fff; font-weight: 700; }
+.rarity-badge    { font-size: 9px; font-weight: 800; }
+.rarity-common   .rarity-badge { color: #9ca3af; }
+.rarity-rare     .rarity-badge { color: #60a5fa; }
+.rarity-epic     .rarity-badge { color: #c084fc; }
+.rarity-legendary .rarity-badge { color: #fbbf24; }
+.shop-seed-meta  { font-size: 9px; color: rgba(255,255,255,0.45); }
+.shop-seed-buy   { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.shop-seed-price { font-size: 11px; color: #fde047; font-weight: 800; white-space: nowrap; }
+.shop-seed-qty   { font-size: 9px; color: rgba(255,255,255,0.42); }
+#shop-refresh-info { text-align: center; color: rgba(255,255,255,0.38); font-size: 11px; padding-bottom: 10px; }
+@keyframes cardFlip {
+  0%   { transform: rotateY(90deg); opacity: 0; }
+  100% { transform: rotateY(0);     opacity: 1; }
+}
+.flip-anim { animation: cardFlip 0.4s ease-out both; }
+
+/* Compensation card */
+#shop-compensation-card {
+  background: linear-gradient(135deg, rgba(236,72,153,0.4), rgba(124,58,237,0.4));
+  border: 2px solid #f472b6; border-radius: 16px; padding: 14px 16px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.35);
+}
+.comp-title { font-size: 14px; font-weight: 800; color: #fff; margin-bottom: 6px; }
+.comp-desc  { font-size: 11px; color: rgba(255,255,255,0.8); margin-bottom: 8px; line-height: 1.5; }
+.comp-timer { font-size: 10px; color: #fde047; margin-bottom: 9px; font-weight: 700; }
+
+/* XP crate progress */
+.xp-progress-wrap { background: rgba(255,255,255,0.08); border-radius: 14px; padding: 10px 13px; margin-top: 8px; display:flex; align-items:center; gap:10px; }
+.xp-progress-bar-bg { flex:1; height: 8px; background: rgba(0,0,0,0.3); border-radius: 5px; overflow:hidden; }
+.xp-progress-bar { height: 100%; background: linear-gradient(90deg,#fb923c,#f97316); border-radius:5px; }
+.xp-progress-text { font-size: 10px; color: rgba(255,255,255,0.6); white-space: nowrap; }
+
+/* ── SELL POPUP ──────────────────────────────────────────── */
+#sell-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.65); z-index: 200;
+  display: flex; align-items: center; justify-content: center;
+  opacity: 0; pointer-events: none; transition: opacity 0.2s;
+}
+#sell-overlay.open { opacity: 1; pointer-events: all; }
+#sell-popup {
+  background: #fff; border-radius: 22px; padding: 28px 22px 20px;
+  width: 82%; max-width: 310px; text-align: center;
+  box-shadow: 0 16px 50px rgba(0,0,0,0.5);
+  transform: scale(0.75); transition: transform 0.22s cubic-bezier(0.34,1.56,0.64,1);
+}
+#sell-overlay.open #sell-popup { transform: scale(1); }
+#sell-popup-emoji { font-size: 56px; display: block; margin-bottom: 10px; }
+#sell-popup-title { font-size: 15px; font-weight: 800; color: #1e293b; margin-bottom: 4px; }
+#sell-popup-price { font-size: 20px; font-weight: 800; color: #f97316; margin-bottom: 16px; }
+#sell-popup-btns  { display: flex; gap: 10px; margin-bottom: 8px; }
+#sell-yes-btn { flex:1; padding:11px; background: linear-gradient(135deg,#16a34a,#22c55e); border:none; border-radius:12px; color:#fff; font-family:inherit; font-size:14px; font-weight:800; cursor:pointer; }
+#sell-no-btn  { flex:1; padding:11px; background: linear-gradient(135deg,#dc2626,#f43f5e); border:none; border-radius:12px; color:#fff; font-family:inherit; font-size:14px; font-weight:800; cursor:pointer; }
+#sell-yes-btn:active, #sell-no-btn:active { opacity: 0.82; }
+#sell-all-btn {
+  width: 100%; padding: 11px;
+  background: linear-gradient(135deg, #7c3aed, #5b21b6);
+  border: none; border-radius: 12px; color: #fff;
+  font-family: inherit; font-size: 13px; font-weight: 800; cursor: pointer;
+  box-shadow: 0 2px 8px rgba(124,58,237,0.4);
+}
+#sell-all-btn:active { opacity: 0.82; }
+
+/* ── CRATE OPEN POPUP ────────────────────────────────────── */
+#lb-open-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.8); z-index: 220;
+  display: flex; align-items: center; justify-content: center;
+  opacity: 0; pointer-events: none; transition: opacity 0.22s;
+}
+#lb-open-overlay.open { opacity: 1; pointer-events: all; }
+#lb-open-popup {
+  background: linear-gradient(145deg, #2e1065, #1e1b4b);
+  border: 2px solid #a78bfa; border-radius: 26px; padding: 30px 24px;
+  width: 84%; max-width: 320px; text-align: center;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.7);
+  transform: scale(0.75); transition: transform 0.22s cubic-bezier(0.34,1.56,0.64,1), background 0.3s, border-color 0.3s;
+}
+#lb-open-overlay.open #lb-open-popup { transform: scale(1); }
+#lb-open-popup h3 { color: #c4b5fd; font-size: 13px; font-weight: 700; margin-bottom: 20px; letter-spacing: 1px; text-transform: uppercase; }
+#lb-box-stage { cursor: pointer; }
+#lb-box-emoji { font-size: 88px; display: block; margin: 0 auto 10px; transition: transform 0.15s; }
+@keyframes lbTapShake { 0%,100% { transform: rotate(0) scale(1); } 25% { transform: rotate(-14deg) scale(1.15); } 75% { transform: rotate(14deg) scale(1.15); } }
+.lb-shaking { animation: lbTapShake 0.28s ease !important; }
+#lb-tap-dots { font-size: 22px; letter-spacing: 8px; color: #a78bfa; margin-bottom: 8px; }
+#lb-tap-hint { font-size: 13px; color: rgba(255,255,255,0.55); }
+
+/* Reward window: whole popup re-skins to the rarity colour */
+#lb-open-popup.reward-common    { background: linear-gradient(160deg, #6b7280, #374151); border-color: #9ca3af; }
+#lb-open-popup.reward-rare      { background: linear-gradient(160deg, #2563eb, #1d4ed8); border-color: #60a5fa; }
+#lb-open-popup.reward-epic      { background: linear-gradient(160deg, #7c3aed, #5b21b6); border-color: #c084fc; }
+#lb-open-popup.reward-legendary { background: linear-gradient(160deg, #d97706, #92400e); border-color: #fbbf24; }
+#lb-open-popup.reward-prismatic { background: conic-gradient(red,orange,yellow,lime,cyan,blue,violet,red); animation: rainbowSpin 5s linear infinite; border-color: #fff; }
+#lb-reward-stage { display: none; }
+@keyframes rewardPop { 0% { transform: scale(0.3); opacity:0; } 60% { transform: scale(1.2); } 100% { transform: scale(1); opacity:1; } }
+#lb-reward-emoji  { font-size: 74px; display: block; margin-bottom: 8px; animation: rewardPop 0.55s cubic-bezier(0.34,1.56,0.64,1) both; }
+#lb-reward-name   { font-size: 21px; font-weight: 800; color: #fff; margin-bottom: 4px; text-shadow: 0 2px 8px rgba(0,0,0,0.4); }
+#lb-reward-rarity { font-size: 12px; font-weight: 800; margin-bottom: 14px; color: rgba(255,255,255,0.85); text-shadow: 0 1px 4px rgba(0,0,0,0.4); }
+#lb-reward-qty    { font-size: 22px; font-weight: 800; color: #fde047; margin-bottom: 16px; text-shadow: 0 2px 8px rgba(0,0,0,0.4); }
+#lb-close-btn {
+  display: none; width: 100%; padding: 13px; margin-top: 8px;
+  background: rgba(0,0,0,0.32); border: 1.5px solid rgba(255,255,255,0.4);
+  border-radius: 14px; color: #fff;
+  font-family: inherit; font-size: 15px; font-weight: 800; cursor: pointer;
+}
+
+/* ── GENERIC OVERLAY ─────────────────────────────────────── */
+.overlay-backdrop {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.65); z-index: 210;
+  display: flex; align-items: center; justify-content: center;
+  opacity: 0; pointer-events: none; transition: opacity 0.2s;
+}
+.overlay-backdrop.open { opacity: 1; pointer-events: all; }
+.generic-popup {
+  background: linear-gradient(145deg, #1e1b4b, #0f172a);
+  border: 2px solid rgba(167,139,250,0.5);
+  border-radius: 22px; padding: 24px 20px; width: 88%; max-width: 340px;
+  box-shadow: 0 16px 50px rgba(0,0,0,0.6);
+  transform: scale(0.78); transition: transform 0.22s cubic-bezier(0.34,1.56,0.64,1);
+  overflow-y: auto; max-height: 88vh;
+}
+.overlay-backdrop.open .generic-popup { transform: scale(1); }
+.generic-popup h2 { color: #fff; font-size: 17px; font-weight: 800; margin-bottom: 14px; text-align: center; }
+.popup-close-btn {
+  width: 100%; margin-top: 16px; padding: 12px;
+  background: linear-gradient(135deg, #6d28d9, #4c1d95);
+  border: none; border-radius: 12px; color: #fff;
+  font-family: inherit; font-size: 14px; font-weight: 800; cursor: pointer;
+}
+#patch-popup h2 { color: #fde047; }
+.patch-item { display: flex; gap: 8px; margin-bottom: 8px; font-size: 12px; color: rgba(255,255,255,0.85); line-height: 1.4; }
+.patch-dot  { color: #4ade80; font-weight: 800; flex-shrink: 0; margin-top: 1px; }
+#lbinfo-popup .rate-row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.08); }
+#lbinfo-popup .rate-label, #lbinfo-popup .rate-val { font-size: 13px; font-weight: 700; }
+#lbinfo-popup h3 { color: #c4b5fd; font-size: 12px; margin: 12px 0 6px; text-transform: uppercase; letter-spacing: 1px; }
+
+/* ── TOAST ───────────────────────────────────────────────── */
+#toast {
+  position: fixed; bottom: 28px; left: 50%;
+  transform: translateX(-50%) translateY(65px);
+  background: rgba(15,23,42,0.92); color: #fff;
+  padding: 10px 22px; border-radius: 24px; font-size: 13px; font-weight: 600;
+  z-index: 500; transition: transform 0.28s ease;
+  white-space: nowrap; max-width: 92vw; overflow: hidden; text-overflow: ellipsis;
+  pointer-events: none; box-shadow: 0 4px 16px rgba(0,0,0,0.45);
+}
+#toast.show { transform: translateX(-50%) translateY(0); }
+.coin-float {
+  position: fixed; pointer-events: none; z-index: 400;
+  font-size: 18px; font-weight: 800; color: #fde047;
+  text-shadow: 0 2px 6px rgba(0,0,0,0.5); animation: coinFly 1.3s ease-out forwards;
+}
+@keyframes coinFly { 0% { opacity:1; transform:translateY(0) scale(1); } 80% { opacity:1; } 100% { opacity:0; transform:translateY(-100px) scale(1.4); } }
+.harvest-flash { position: absolute; inset: 0; border-radius: inherit; background: rgba(253,224,71,0.5); animation: flashOut 0.38s ease-out forwards; pointer-events: none; z-index: 5; }
+@keyframes flashOut { 0% { opacity:1; } 100% { opacity:0; } }
+
+/* ── TOPBAR ICON BUTTONS ─────────────────────────────────── */
+.topbar-icon-btn {
+  width: clamp(28px,8vw,34px); height: clamp(28px,8vw,34px); border-radius: 50%;
+  border: 2px solid rgba(255,255,255,0.32);
+  background: rgba(255,255,255,0.14);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; font-size: clamp(14px,4vw,17px); transition: all 0.15s;
+  overflow: hidden; flex-shrink: 0;
+}
+.topbar-icon-btn:active { transform: scale(0.88); }
+#profile-btn-img { width:100%; height:100%; object-fit:cover; border-radius:50%; display:none; }
+#profile-btn-emoji { font-size: 18px; }
+
+/* ── PROFILE SLIDE-UP ────────────────────────────────────── */
+#profile-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.68); z-index: 250;
+  display: flex; align-items: flex-end; justify-content: center;
+  opacity: 0; pointer-events: none; transition: opacity 0.22s;
+}
+#profile-overlay.open { opacity: 1; pointer-events: all; }
+#profile-popup {
+  background: linear-gradient(160deg, #064e3b 0%, #022c22 100%);
+  border: 2px solid rgba(74,222,128,0.28); border-radius: 26px 26px 0 0;
+  width: 100%; max-width: 430px; max-height: 85vh; overflow-y:auto;
+  padding: 20px 20px 36px;
+  transform: translateY(100%); transition: transform 0.28s cubic-bezier(0.25,0.8,0.25,1);
+}
+#profile-overlay.open #profile-popup { transform: translateY(0); }
+.profile-drag-handle { width:40px; height:4px; border-radius:2px; background:rgba(255,255,255,0.22); margin:0 auto 18px; }
+#profile-tabs { display:flex; gap:8px; margin-bottom:16px; }
+.profile-tab-btn {
+  flex:1; padding:9px; border-radius:10px; border:1.5px solid rgba(255,255,255,0.18);
+  background:rgba(255,255,255,0.06); color:rgba(255,255,255,0.7); font-family:inherit;
+  font-weight:700; font-size:12px; cursor:pointer; transition: all 0.15s;
+}
+.profile-tab-btn.active { background:rgba(74,222,128,0.25); border-color:#4ade80; color:#fff; }
+#profile-avatar-wrap { display:flex; flex-direction:column; align-items:center; gap:6px; margin-bottom:18px; }
+#profile-avatar-ring {
+  width:78px; height:78px; border-radius:50%;
+  border:3px solid #4ade80; overflow:hidden; cursor:pointer;
+  background:rgba(74,222,128,0.12); display:flex; align-items:center; justify-content:center;
+  font-size:38px; transition:transform 0.14s;
+}
+#profile-avatar-ring:active { transform: scale(0.91); }
+#profile-avatar-img { width:100%; height:100%; object-fit:cover; display:none; }
+.avatar-edit-hint { font-size:10px; color:rgba(255,255,255,0.4); }
+#profile-fields { display:flex; flex-direction:column; gap:11px; margin-bottom:15px; }
+.profile-input {
+  width:100%; padding:12px 14px;
+  background:rgba(255,255,255,0.09); border:1.5px solid rgba(255,255,255,0.18);
+  border-radius:12px; color:#fff; font-family:inherit; font-size:15px; outline:none;
+  transition:border-color 0.14s;
+}
+.profile-input:focus { border-color:#4ade80; }
+.profile-input::placeholder { color:rgba(255,255,255,0.3); }
+#profile-save-btn {
+  width:100%; padding:13px;
+  background:linear-gradient(135deg,#16a34a,#15803d);
+  border:none; border-radius:14px; color:#fff;
+  font-family:inherit; font-size:15px; font-weight:800; cursor:pointer;
+  box-shadow:0 4px 14px rgba(22,163,74,0.38); transition:opacity 0.14s;
+}
+#profile-save-btn:active { opacity:0.82; }
+#profile-stats-section { margin-top:16px; border-top:1px solid rgba(255,255,255,0.09); padding-top:14px; }
+.profile-stats-label { font-size:10px; font-weight:800; letter-spacing:1px; color:rgba(255,255,255,0.4); text-transform:uppercase; margin-bottom:9px; }
+.profile-stat-row { display:flex; align-items:center; justify-content:space-between; padding:7px 0; border-bottom:1px solid rgba(255,255,255,0.05); }
+.profile-stat-name { font-size:13px; color:rgba(255,255,255,0.55); }
+.profile-stat-val { font-size:15px; font-weight:800; color:#fde047; }
+
+#favorites-grid { display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:8px; min-height:80px; }
+.fav-empty-note { font-size:12px; color:rgba(255,255,255,0.35); text-align:center; padding:30px 0; grid-column:1/-1; }
+.fav-add-slot {
+  background: rgba(74,222,128,0.1); border: 2px dashed rgba(74,222,128,0.5);
+  border-radius: 12px; aspect-ratio: 1; min-width:0;
+  display:flex; align-items:center; justify-content:center;
+  font-size: clamp(20px,7vw,26px); color:#4ade80; cursor:pointer; transition: all 0.15s;
+}
+.fav-add-slot:active { transform: scale(0.91); background: rgba(74,222,128,0.2); }
+.fav-remove-badge {
+  position:absolute; top:1px; right:2px; font-size:11px; cursor:pointer; opacity:0.85;
+  padding:2px; line-height:1; z-index:2; background: rgba(0,0,0,0.35); border-radius: 50%;
+  width:16px; height:16px; display:flex; align-items:center; justify-content:center;
+}
+.fav-remove-badge:active { transform: scale(0.8); }
+
+/* ── FAVORITES PICKER OVERLAY ─────────────────────────────── */
+#fav-picker-popup { max-height: 80vh; display:flex; flex-direction:column; }
+#fav-picker-grid { display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:8px; overflow-y:auto; padding-bottom:6px; }
+.fav-picker-empty { grid-column:1/-1; text-align:center; font-size:12px; color:rgba(255,255,255,0.4); padding:24px 0; }
+
+/* ── LEADERBOARD SLIDE-UP ────────────────────────────────── */
+#lb-list-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.72); z-index: 250;
+  display: flex; align-items: flex-end; justify-content: center;
+  opacity: 0; pointer-events: none; transition: opacity 0.22s;
+}
+#lb-list-overlay.open { opacity: 1; pointer-events: all; }
+#lb-list-popup {
+  background: linear-gradient(160deg, #1e1b4b 0%, #0f172a 100%);
+  border: 2px solid rgba(167,139,250,0.28); border-radius: 26px 26px 0 0;
+  width: 100%; max-width: 430px; height: 88vh;
+  display: flex; flex-direction: column;
+  transform: translateY(100%); transition: transform 0.28s cubic-bezier(0.25,0.8,0.25,1);
+}
+#lb-list-overlay.open #lb-list-popup { transform: translateY(0); }
+#lb-list-header { padding:18px 18px 12px; border-bottom:1px solid rgba(255,255,255,0.09); flex-shrink:0; }
+.lb-drag-handle { width:40px; height:4px; border-radius:2px; background:rgba(255,255,255,0.22); margin:0 auto 14px; }
+.lb-header-row { display:flex; align-items:center; justify-content:space-between; }
+#lb-list-title { font-size:18px; font-weight:800; color:#fff; }
+#lb-close-list-btn {
+  background:rgba(255,255,255,0.1); border:1.5px solid rgba(255,255,255,0.2);
+  border-radius:9px; color:#fff; font-family:inherit; font-size:12px; font-weight:700;
+  padding:6px 13px; cursor:pointer;
+}
+#lb-close-list-btn:active { background:rgba(255,255,255,0.22); }
+#lb-last-updated { font-size:10px; color:rgba(255,255,255,0.3); margin-top:4px; }
+#lb-tabs { display:flex; gap:8px; margin-top:12px; }
+.lb-tab-btn {
+  flex:1; padding:8px; border-radius:10px; border:1.5px solid rgba(255,255,255,0.18);
+  background:rgba(255,255,255,0.06); color:rgba(255,255,255,0.7); font-family:inherit;
+  font-weight:700; font-size:12px; cursor:pointer; transition: all 0.15s;
+}
+.lb-tab-btn.active { background:rgba(167,139,250,0.28); border-color:#a78bfa; color:#fff; }
+#lb-list-body { flex:1; overflow-y:auto; -webkit-overflow-scrolling:touch; padding:14px; display:flex; flex-direction:column; gap:9px; }
+.lb-prize-section { background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.09); border-radius:16px; padding:13px 15px; }
+.lb-prize-title { font-size:10px; font-weight:800; letter-spacing:1px; text-transform:uppercase; color:rgba(255,255,255,0.38); margin-bottom:9px; }
+.lb-prize-row { display:flex; align-items:center; gap:9px; padding:4px 0; }
+.lb-prize-medal { font-size:20px; width:26px; text-align:center; }
+.lb-prize-desc { font-size:13px; color:rgba(255,255,255,0.75); font-weight:600; }
+.lb-player-row { display:flex; align-items:center; gap:11px; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.07); border-radius:14px; padding:9px 13px; }
+.lb-player-row.lb-me { background:rgba(74,222,128,0.1); border-color:rgba(74,222,128,0.32); }
+.lb-player-row.lb-top1 { background:rgba(251,191,36,0.09); border-color:rgba(251,191,36,0.38); }
+.lb-player-row.lb-top2 { background:rgba(148,163,184,0.09); border-color:rgba(148,163,184,0.35); }
+.lb-player-row.lb-top3 { background:rgba(205,127,50,0.09); border-color:rgba(205,127,50,0.35); }
+.lb-rank { font-size:14px; font-weight:800; color:rgba(255,255,255,0.45); width:22px; text-align:center; flex-shrink:0; }
+.lb-rank.gold   { color:#fbbf24; font-size:18px; }
+.lb-rank.silver { color:#94a3b8; font-size:18px; }
+.lb-rank.bronze { color:#cd7f32; font-size:18px; }
+.lb-avatar-circle { width:40px; height:40px; border-radius:50%; flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:20px; overflow:hidden; background:rgba(255,255,255,0.1); border:1.5px solid rgba(255,255,255,0.18); }
+.lb-avatar-circle img { width:100%; height:100%; object-fit:cover; }
+.lb-player-info { flex:1; min-width:0; }
+.lb-player-name { font-size:14px; font-weight:700; color:#fff; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.lb-player-coins { font-size:12px; color:#fde047; font-weight:600; }
+.lb-me-badge { font-size:10px; background:rgba(74,222,128,0.25); border:1px solid #4ade80; color:#4ade80; border-radius:6px; padding:2px 7px; font-weight:800; flex-shrink:0; }
+.lb-offline-note { font-size:10px; color:rgba(255,255,255,0.35); text-align:center; padding:6px 0 0; }
+
+/* ═══════════════════════════════════════════════════════════
+   v0.5 — WEATHER SYSTEM
+   ═══════════════════════════════════════════════════════════ */
+#weather-bg-layer {
+  position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  transition: opacity 1.2s ease;
+  opacity: 0;
+}
+#weather-bg-layer.active { opacity: 1; }
+#weather-bg-layer.rainbow-bg {
+  background: linear-gradient(120deg,#f472b6,#facc15,#4ade80,#38bdf8,#a78bfa,#f472b6);
+  background-size: 300% 300%; animation: rainbowBgMove 8s ease infinite;
+}
+#weather-bg-layer.prism-bg { background: #050208; }
+@keyframes rainbowBgMove { 0%{background-position:0% 50%;} 50%{background-position:100% 50%;} 100%{background-position:0% 50%;} }
+#weather-particles { position: fixed; inset: 0; z-index: 1; pointer-events: none; overflow: hidden; }
+.wparticle { position: absolute; top: -5%; will-change: transform, opacity; }
+@keyframes fallDown { 0% { transform: translateY(0) translateX(0) rotate(0deg); opacity:0.9; } 100% { transform: translateY(115vh) translateX(var(--drift,0px)) rotate(var(--rot,180deg)); opacity:0.15; } }
+
+#prism-border-frame {
+  position: fixed; inset: 0; z-index: 6; pointer-events: none;
+  border: 5px solid transparent; opacity: 0; transition: opacity 0.6s;
+  box-sizing: border-box;
+}
+#prism-border-frame.active {
+  opacity: 1;
+  border-image: conic-gradient(red,orange,yellow,lime,cyan,blue,violet,red) 1;
+  animation: rainbowBorderSpin 4s linear infinite;
+}
+@keyframes rainbowBorderSpin { 0%{ filter:hue-rotate(0deg);} 100%{ filter:hue-rotate(360deg);} }
+
+.prism-gift {
+  position: fixed; z-index: 15; font-size: 42px; cursor: pointer; line-height:1;
+  animation: prismGiftFloat 2.2s ease-in-out infinite, prismGiftGlow 1.4s ease-in-out infinite;
+}
+@keyframes prismGiftFloat { 0%,100%{ transform: translateY(0) scale(1); } 50%{ transform: translateY(-14px) scale(1.08); } }
+@keyframes prismGiftGlow  { 0%,100%{ filter: drop-shadow(0 0 8px #f0abfc) drop-shadow(0 0 2px #fff); } 50%{ filter: drop-shadow(0 0 20px #38bdf8) drop-shadow(0 0 6px #fff); } }
+
+#weather-pill {
+  display: flex; align-items: center; gap: 5px;
+  font-size: clamp(9px,2.6vw,11px); font-weight: 800; color: #fff;
+  background: rgba(255,255,255,0.14); border: 1.5px solid rgba(255,255,255,0.28);
+  border-radius: 10px; padding: 3px 7px; white-space: nowrap; flex-shrink: 0;
+  cursor: pointer;
+}
+#weather-pill .wp-emoji { font-size: 13px; }
+#weather-pill .wp-timer { opacity: 0.75; font-weight: 700; }
+
+.mutation-badge {
+  position: absolute; top: 3px; left: 3px; font-size: 11px; z-index: 3;
+  filter: drop-shadow(0 1px 3px rgba(0,0,0,0.6));
+  animation: mutPulse 1s ease-in-out infinite;
+}
+@keyframes mutPulse { 0%,100%{ transform: scale(1); } 50%{ transform: scale(1.25); } }
+.plot.mut-flash::after {
+  content:''; position:absolute; inset:0; border-radius:inherit;
+  background: radial-gradient(circle, rgba(255,255,255,0.85) 0%, rgba(255,255,255,0) 70%);
+  animation: mutFlashOut 0.7s ease-out forwards; pointer-events:none; z-index:6;
+}
+@keyframes mutFlashOut { 0%{opacity:1; transform:scale(0.3);} 100%{opacity:0; transform:scale(1.6);} }
+
+/* Mutation colour tints — applied to both grid plots and inventory slots */
+.mut-tint { position: relative; z-index: 1; }
+.mut-tint::before {
+  content:''; position:absolute; inset:-3px; border-radius:16px; z-index:-1; opacity:0.9;
+}
+.inv-slot.mut-tint::before { inset:-2px; border-radius:14px; }
+.mut-rain::before   { background: linear-gradient(135deg,#3b82f6,#1d4ed8); }
+.mut-leaves::before { background: linear-gradient(135deg,#fb923c,#9a3412); }
+.mut-snow::before   { background: linear-gradient(135deg,#ffffff,#93c5fd); }
+.mut-luck::before   { background: linear-gradient(135deg,#fde047,#65a30d); }
+.mut-rainbow::before,
+.mut-prism::before {
+  background: conic-gradient(red,orange,yellow,lime,cyan,blue,violet,red);
+  animation: rainbowSpin 3s linear infinite;
+}
+.plot.mut-prism, .inv-slot.mut-prism { background: #0a0a0f !important; }
+
+/* ═══════════════════════════════════════════════════════════
+   v0.5 — KEY / QUEST CURRENCY DISPLAY
+   ═══════════════════════════════════════════════════════════ */
+#keys-display { font-size: clamp(10px,3vw,13px); font-weight: 800; color: #f0abfc; text-shadow: 0 1px 4px rgba(0,0,0,0.5); display: flex; align-items: center; gap: 3px; white-space:nowrap; }
+
+/* ═══════════════════════════════════════════════════════════
+   v0.5 — GARDEN PASS BUTTON (top-left, floats over garden — replaces the old quests button)
+   ═══════════════════════════════════════════════════════════ */
+#pass-fab {
+  position: fixed; left: 10px; z-index: 40;
+  top: calc(64px + env(safe-area-inset-top));
+  width: 46px; height: 46px; border-radius: 14px;
+  background: linear-gradient(135deg, #16a34a, #0e7490);
+  border: 2px solid rgba(255,255,255,0.4);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 21px; cursor: pointer; box-shadow: 0 4px 14px rgba(0,0,0,0.35);
+  transition: transform 0.12s;
+}
+#pass-fab:active { transform: scale(0.9); }
+#quests-fab-badge {
+  position: absolute; top: -5px; right: -5px; min-width: 17px; height: 17px; border-radius: 9px;
+  background: #ef4444; color: #fff; font-size: 10px; font-weight: 800;
+  display: none; align-items: center; justify-content: center; padding: 0 4px;
+  border: 1.5px solid rgba(255,255,255,0.6);
+}
+#quests-fab-badge.show { display: flex; }
+
+/* ═══════════════════════════════════════════════════════════
+   v0.5 — QUESTS PANEL
+   ═══════════════════════════════════════════════════════════ */
+#quests-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.68); z-index: 240;
+  display: flex; align-items: flex-end; justify-content: center;
+  opacity: 0; pointer-events: none; transition: opacity 0.22s;
+}
+#quests-overlay.open { opacity: 1; pointer-events: all; }
+#quests-popup {
+  background: linear-gradient(160deg, #083344 0%, #0f172a 100%);
+  border: 2px solid rgba(34,211,238,0.28); border-radius: 26px 26px 0 0;
+  width: 100%; max-width: 430px; max-height: 85vh; overflow-y: auto;
+  padding: 20px 20px 32px;
+  transform: translateY(100%); transition: transform 0.28s cubic-bezier(0.25,0.8,0.25,1);
+}
+#quests-overlay.open #quests-popup { transform: translateY(0); }
+#quests-header-row { display:flex; align-items:center; justify-content:space-between; margin-bottom:4px; }
+#quests-title { font-size: 18px; font-weight: 800; color:#fff; }
+#quests-refresh-timer { font-size: 10px; color: rgba(255,255,255,0.4); margin-bottom: 14px; }
+.quest-card {
+  background: rgba(255,255,255,0.06); border: 1.5px solid rgba(255,255,255,0.14);
+  border-radius: 16px; padding: 12px 14px; margin-bottom: 10px;
+  display: flex; flex-direction: column; gap: 7px;
+}
+.quest-card.quest-done { border-color: rgba(74,222,128,0.5); background: rgba(74,222,128,0.08); }
+.quest-card.quest-key  { border-color: rgba(240,171,252,0.55); background: rgba(168,85,247,0.1); }
+.quest-card.quest-bonus-slot { border-color: #f0abfc; background: linear-gradient(135deg, rgba(244,114,182,0.12), rgba(56,189,248,0.1)); }
+.quest-top-row { display: flex; align-items: center; gap: 10px; }
+.quest-icon { font-size: 24px; flex-shrink:0; }
+.quest-desc { font-size: 13px; color: #fff; font-weight: 700; flex: 1; }
+.quest-reward { font-size: 11px; font-weight: 800; color: #67e8f9; white-space: nowrap; }
+.quest-progress-wrap { height: 7px; background: rgba(0,0,0,0.32); border-radius: 4px; overflow: hidden; }
+.quest-progress-bar { height: 100%; background: linear-gradient(90deg,#22d3ee,#0891b2); border-radius: 4px; transition: width 0.25s; }
+.quest-bottom-row { display: flex; align-items: center; justify-content: space-between; }
+.quest-progress-text { font-size: 10px; color: rgba(255,255,255,0.5); }
+.quest-claim-btn {
+  background: linear-gradient(135deg,#16a34a,#15803d); border:none; border-radius:9px;
+  color:#fff; font-family:inherit; font-size:11px; font-weight:800; padding:6px 14px; cursor:pointer;
+}
+.quest-claim-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+.quest-claim-btn:not(:disabled):active { transform: scale(0.93); }
+#quests-reroll-btn {
+  background: #0a0a0f; border: 2px solid transparent;
+  border-image: conic-gradient(red,orange,yellow,lime,cyan,blue,violet,red) 1;
+  border-radius: 10px; color:#fff; font-family:inherit; font-size:11px; font-weight:800;
+  padding:7px 12px; cursor:pointer; white-space:nowrap; flex-shrink:0;
+  display:flex; flex-direction:column; align-items:center; gap:1px; line-height:1.1;
+}
+#quests-reroll-btn:disabled { opacity: 0.4; cursor: not-allowed; border-image: none; border-color: rgba(255,255,255,0.2); }
+#quests-reroll-btn:not(:disabled):active { transform: scale(0.93); }
+#quests-reroll-sub { font-size: 8.5px; color: rgba(255,255,255,0.55); font-weight: 700; }
+#quests-bonus-card {
+  border-radius: 16px; padding: 12px 14px; margin-bottom: 12px;
+  background: linear-gradient(135deg, rgba(244,114,182,0.25), rgba(124,58,237,0.3));
+  border: 2px solid #f0abfc; display:flex; align-items:center; gap:10px;
+}
+#quests-bonus-card .qb-text { flex:1; font-size: 12px; color:#fff; font-weight:700; line-height:1.4; }
+#quests-bonus-card .qb-claim-btn {
+  background: linear-gradient(135deg,#16a34a,#15803d); border:none; border-radius:10px;
+  color:#fff; font-family:inherit; font-weight:800; font-size:11px; padding:9px 12px; cursor:pointer; white-space:nowrap;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   v0.5 — GARDEN PASS PANEL (slides from LEFT, mirrors the shop panel)
+   ═══════════════════════════════════════════════════════════ */
+#pass-panel {
+  left: -105%; transition: left 0.3s cubic-bezier(0.25,0.8,0.25,1);
+  background:
+    radial-gradient(circle at 15% 0%, rgba(251,191,36,0.25) 0%, transparent 45%),
+    radial-gradient(circle at 100% 15%, rgba(244,114,182,0.28) 0%, transparent 50%),
+    linear-gradient(165deg, #4c1d95 0%, #1e1b4b 45%, #0c4a6e 100%);
+  border-right: 2px solid rgba(251,191,36,0.4);
+}
+#pass-panel.open { left: 0; }
+#pass-panel .panel-header {
+  background: linear-gradient(135deg, rgba(251,191,36,0.16), rgba(124,58,237,0.22));
+  border-bottom: 2px solid rgba(251,191,36,0.35);
+}
+#pass-panel .panel-title {
+  background: linear-gradient(90deg, #fde047, #fb923c);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  text-shadow: none; font-weight: 900; letter-spacing: 0.3px;
+}
+#pass-header-row { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+#pass-quests-btn {
+  background: rgba(255,255,255,0.12); border: 1.5px solid rgba(255,255,255,0.25);
+  border-radius: 9px; color:#fff; font-family:inherit; font-size:12px; font-weight:700;
+  padding:6px 12px; cursor:pointer; display:flex; align-items:center; gap:5px; position: relative; flex-shrink:0;
+}
+#pass-quests-btn:active { background: rgba(255,255,255,0.22); }
+#pass-quests-btn-badge {
+  position: absolute; top: -6px; right: -6px; min-width: 16px; height: 16px; border-radius: 8px;
+  background: #ef4444; color: #fff; font-size: 9px; font-weight: 800;
+  display: none; align-items: center; justify-content: center; padding: 0 3px;
+  border: 1.5px solid rgba(255,255,255,0.6);
+}
+#pass-quests-btn-badge.show { display: flex; }
+#pass-level-bar-wrap { margin-top: 12px; display:flex; align-items:center; gap:10px; }
+#pass-level-badge {
+  font-size: 12px; font-weight: 900; color: #1e1b4b; white-space:nowrap;
+  background: linear-gradient(135deg, #fde047, #fb923c); padding: 5px 11px; border-radius: 20px;
+  box-shadow: 0 2px 8px rgba(251,191,36,0.5);
+}
+.pass-xp-bg { flex:1; height: 12px; background: rgba(0,0,0,0.4); border-radius: 7px; overflow:hidden; border: 1px solid rgba(255,255,255,0.15); }
+.pass-xp-bar { height: 100%; background: linear-gradient(90deg,#fde047,#fb923c,#f472b6); border-radius:7px; transition: width 0.3s; box-shadow: 0 0 10px rgba(251,191,36,0.6); }
+#pass-xp-text { font-size: 10px; color: rgba(255,255,255,0.6); white-space:nowrap; font-weight:700; }
+#pass-upsell-card {
+  margin: 12px 0 0; padding: 12px 14px; border-radius: 14px;
+  background: linear-gradient(135deg, rgba(244,114,182,0.3), rgba(56,189,248,0.25));
+  border: 1.5px solid #f0abfc; display:flex; align-items:center; gap: 10px;
+}
+#pass-upsell-card .pu-text { flex:1; font-size: 12px; color:#fff; font-weight:700; line-height:1.4; }
+#pass-upsell-card .pu-buy-btn {
+  background: linear-gradient(135deg,#f97316,#ef4444); border:none; border-radius:10px;
+  color:#fff; font-family:inherit; font-weight:800; font-size:12px; padding:9px 14px; cursor:pointer; white-space:nowrap;
+}
+#pass-track-scroll { flex: 1; overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch; padding: 14px; box-sizing: border-box; }
+.pass-level-row { display:flex; align-items:center; gap:10px; margin-bottom: 10px; }
+.pass-level-num { width: 26px; text-align:center; font-size: 11px; font-weight: 800; color: rgba(255,255,255,0.4); flex-shrink:0; }
+
+@keyframes prReadyPulse {
+  0%,100% { box-shadow: 0 0 8px rgba(253,224,71,0.45), inset 0 0 0 1.5px rgba(253,224,71,0.6); }
+  50%     { box-shadow: 0 0 18px rgba(253,224,71,0.85), inset 0 0 0 1.5px rgba(253,224,71,0.9); }
+}
+.pass-reward-slot {
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  gap:2px; border-radius:16px; padding:6px 4px; box-sizing:border-box;
+  aspect-ratio: 1 / 1; width:100%; min-width:0; margin-bottom: 8px;
+  position: relative; overflow:hidden;
+  background: linear-gradient(150deg, rgba(30,27,75,0.75), rgba(12,74,110,0.6));
+  border: 2px solid rgba(255,255,255,0.16);
+}
+.pass-reward-slot::after {
+  content:''; position:absolute; inset:0; pointer-events:none;
+  background: linear-gradient(115deg, transparent 40%, rgba(255,255,255,0.12) 50%, transparent 60%);
+}
+.pass-reward-slot.pr-locked { opacity: 0.5; filter: grayscale(0.3); }
+.pass-reward-slot.pr-done   {
+  border-color: #4ade80; background: linear-gradient(150deg, rgba(22,163,74,0.4), rgba(6,95,70,0.35));
+}
+.pass-reward-slot.pr-ready  {
+  border-color: #fde047;
+  background: linear-gradient(150deg, rgba(251,191,36,0.32), rgba(217,119,6,0.28));
+  animation: prReadyPulse 1.6s ease-in-out infinite;
+}
+.pass-reward-slot.pr-final  {
+  border-color: #f472b6; border-width: 2.5px;
+  background: linear-gradient(150deg, rgba(244,114,182,0.4), rgba(124,58,237,0.4), rgba(56,189,248,0.3));
+}
+.pr-level {
+  position:absolute; top:3px; left:4px; font-size:8.5px; font-weight:900; color:#1e1b4b;
+  background: rgba(253,224,71,0.9); border-radius: 6px; padding: 1px 4px; line-height:1.3; z-index:1;
+}
+.pr-emoji { font-size: 25px; line-height:1; flex-shrink:0; filter: drop-shadow(0 2px 3px rgba(0,0,0,0.4)); z-index:1; }
+.pr-name  {
+  font-size: 8px; color:rgba(255,255,255,0.85); font-weight:700; text-align:center;
+  width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding:0 2px; box-sizing:border-box; z-index:1;
+}
+.pr-qty   { font-size: 10px; font-weight:900; color:#fde047; line-height:1; z-index:1; text-shadow: 0 1px 3px rgba(0,0,0,0.5); }
+.pass-claim-mini {
+  margin-top:2px; width:92%; box-sizing:border-box; z-index:1;
+  background: linear-gradient(135deg,#22c55e,#15803d); border:none; border-radius:7px;
+  color:#fff; font-family:inherit; font-size:9px; font-weight:900; padding:4px 3px; cursor:pointer; white-space:nowrap;
+}
+.pass-claim-mini:disabled { opacity:0.35; cursor:not-allowed; background: rgba(255,255,255,0.12); }
+.pass-claim-mini.done-mini { background: rgba(74,222,128,0.28); color:#4ade80; border: 1px solid #4ade80; }
+#pass-tracks-flex { display:flex; gap: 10px; width:100%; }
+.pass-track-col { flex:1 1 0; min-width:0; display:flex; flex-direction:column; }
+.pass-track-label {
+  font-size:11px; font-weight:900; text-align:center; text-transform:uppercase; letter-spacing:0.5px;
+  margin-bottom:8px; padding: 6px 4px; border-radius: 10px;
+}
+.pass-track-label.free-label { color:#052e16; background: linear-gradient(135deg,#4ade80,#16a34a); }
+.pass-track-label.paid-label { color:#3b0764; background: linear-gradient(135deg,#f0abfc,#c084fc); }
+
+/* ═══════════════════════════════════════════════════════════
+   v0.5 — PRISMATIC CRATE (event) CARD in shop
+   ═══════════════════════════════════════════════════════════ */
+#prismatic-crate-card {
+  border-radius: 18px; padding: 15px 16px; margin-bottom: 4px;
+  background: conic-gradient(from 180deg, rgba(244,114,182,0.35), rgba(56,189,248,0.35), rgba(167,139,250,0.35), rgba(244,114,182,0.35));
+  border: 2px solid #f0abfc; box-shadow: 0 4px 20px rgba(168,85,247,0.35);
+  display:flex; align-items:center; gap: 12px; cursor: pointer; transition: transform 0.1s;
+}
+#prismatic-crate-card:active { transform: scale(0.97); }
+#prismatic-crate-card .pc-emoji { font-size: 38px; flex-shrink:0; }
+#prismatic-crate-card .pc-info  { flex:1; }
+#prismatic-crate-card .pc-title { font-size: 14px; font-weight:800; color:#fff; margin-bottom:2px; }
+#prismatic-crate-card .pc-sub   { font-size: 10.5px; color: rgba(255,255,255,0.8); }
+#prismatic-crate-card .pc-btn   {
+  background: rgba(0,0,0,0.32); border: 1.5px solid rgba(255,255,255,0.45); border-radius: 10px;
+  color:#fff; font-family:inherit; font-size:11px; font-weight:800; padding: 8px 13px; cursor:pointer; white-space:nowrap;
+}
+#prismatic-crate-card .pc-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* Prismatic Pass showcase card in shop — bigger & fancier than a plain button */
+#prismatic-pass-shop-card {
+  border-radius: 20px; padding: 20px 16px; margin-bottom: 4px; text-align: center;
+  background: linear-gradient(160deg, rgba(76,29,149,0.55), rgba(219,39,119,0.4), rgba(8,145,178,0.35));
+  border: 2.5px solid #f0abfc; box-shadow: 0 6px 26px rgba(168,85,247,0.45);
+  cursor: pointer; transition: transform 0.12s;
+}
+#prismatic-pass-shop-card:active { transform: scale(0.97); }
+.ppc-emojis { display:flex; align-items:center; justify-content:center; gap: 12px; margin-bottom: 8px; }
+.ppc-emojis .ppc-main { font-size: 44px; filter: drop-shadow(0 3px 8px rgba(0,0,0,0.4)); }
+.ppc-emojis .ppc-side { font-size: 24px; opacity: 0.9; }
+.ppc-title { font-size: 17px; font-weight: 800; color:#fff; margin-bottom: 4px; text-shadow: 0 2px 6px rgba(0,0,0,0.35); }
+.ppc-sub   { font-size: 11px; color: rgba(255,255,255,0.85); margin-bottom: 8px; }
+.ppc-price { display:inline-block; font-size: 13px; font-weight:800; color:#fde047; background: rgba(0,0,0,0.3); border-radius: 10px; padding: 5px 14px; }
+.ppc-price.owned { color:#4ade80; }
+
+#prismatic-pass-info-popup .ppi-emojis { display:flex; align-items:center; justify-content:center; gap: 16px; margin: 4px 0 16px; }
+#prismatic-pass-info-popup .ppi-main { font-size: 60px; filter: drop-shadow(0 4px 10px rgba(0,0,0,0.45)); }
+#prismatic-pass-info-popup .ppi-side { font-size: 32px; opacity: 0.9; }
+#prismatic-pass-info-popup .ppi-rewards { font-size: 12px; color: rgba(255,255,255,0.82); line-height: 1.9; text-align: left; background: rgba(255,255,255,0.06); border-radius: 12px; padding: 12px 14px; }
+
+/* stronger tap-shake + particle burst for prismatic crate opening */
+@keyframes lbTapShakeStrong { 0%,100% { transform: rotate(0) scale(1); } 20% { transform: rotate(-20deg) scale(1.22);} 50%{transform:rotate(16deg) scale(1.28);} 80% { transform: rotate(-14deg) scale(1.2); } }
+.lb-shaking-strong { animation: lbTapShakeStrong 0.34s ease !important; }
+.lb-burst-particle {
+  position:absolute; font-size: 18px; pointer-events:none; z-index: 300;
+  animation: lbBurstFly 0.9s ease-out forwards;
+}
+@keyframes lbBurstFly { 0%{ transform:translate(0,0) scale(0.4); opacity:1; } 100%{ transform:translate(var(--bx,0px),var(--by,0px)) scale(1.1); opacity:0; } }
+
+/* ═══════════════════════════════════════════════════════════
+   v0.5 — WHEEL OF FORTUNE
+   ═══════════════════════════════════════════════════════════ */
+#wheel-card {
+  border-radius: 18px; padding: 14px 16px; margin-bottom: 4px;
+  background: linear-gradient(135deg, rgba(6,95,70,0.55), rgba(4,120,87,0.4));
+  border: 2px solid #34d399; display:flex; align-items:center; gap: 12px; cursor: pointer; transition: transform 0.1s;
+}
+#wheel-card:active { transform: scale(0.97); }
+#wheel-card .wc-emoji { font-size: 34px; flex-shrink:0; }
+#wheel-card .wc-info  { flex:1; }
+#wheel-card .wc-title { font-size: 13px; font-weight:800; color:#fff; margin-bottom:2px; }
+#wheel-card .wc-sub   { font-size: 10.5px; color: rgba(255,255,255,0.75); }
+
+#wheel-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.78); z-index: 260;
+  display: flex; align-items: center; justify-content: center;
+  opacity: 0; pointer-events: none; transition: opacity 0.22s;
+}
+#wheel-overlay.open { opacity: 1; pointer-events: all; }
+#wheel-popup {
+  background: linear-gradient(160deg, #064e3b 0%, #022c22 100%);
+  border: 2px solid #34d399; border-radius: 24px; padding: 22px 18px;
+  width: 90%; max-width: 360px; text-align:center;
+  box-shadow: 0 18px 50px rgba(0,0,0,0.6);
+  transform: scale(0.8); transition: transform 0.22s cubic-bezier(0.34,1.56,0.64,1);
+  max-height: 92vh; overflow-y: auto;
+}
+#wheel-overlay.open #wheel-popup { transform: scale(1); }
+#wheel-popup h3 { color:#6ee7b7; font-size:13px; font-weight:800; letter-spacing:1px; text-transform:uppercase; margin-bottom: 14px; }
+#wheel-close-x { position: relative; float: right; margin-top:-8px; font-size: 16px; color: rgba(255,255,255,0.5); cursor:pointer; }
+#wheel-svg-wrap { position: relative; width: 240px; height: 240px; margin: 0 auto 14px; }
+#wheel-pointer { position:absolute; top:-6px; left:50%; transform:translateX(-50%); font-size:26px; z-index:5; filter: drop-shadow(0 3px 4px rgba(0,0,0,0.5)); }
+#wheel-svg { width: 100%; height: 100%; transition: transform 4.2s cubic-bezier(0.12,0.85,0.15,1); }
+.wheel-slot-emoji { font-size: 15px; }
+#wheel-spins-row { display:flex; align-items:center; justify-content:center; gap:8px; margin-bottom: 10px; font-size:12px; color:#fff; font-weight:700; }
+.wheel-spin-dot { width:10px; height:10px; border-radius:50%; background: rgba(255,255,255,0.18); border:1.5px solid rgba(255,255,255,0.35); }
+.wheel-spin-dot.filled { background:#34d399; border-color:#34d399; }
+#wheel-timer-text { font-size:10px; color: rgba(255,255,255,0.45); margin-bottom: 12px; }
+#wheel-spin-btn {
+  width:100%; padding:13px; border:none; border-radius:14px;
+  background: linear-gradient(135deg,#16a34a,#15803d); color:#fff;
+  font-family:inherit; font-size:14px; font-weight:800; cursor:pointer;
+  box-shadow: 0 4px 14px rgba(22,163,74,0.4); margin-bottom:8px;
+}
+#wheel-spin-btn:disabled { opacity:0.35; cursor:not-allowed; }
+#wheel-spin-btn:not(:disabled):active { transform: scale(0.97); }
+#wheel-paid-spin-btn {
+  width:100%; padding:11px; border:none; border-radius:14px;
+  background: rgba(255,255,255,0.1); border: 1.5px solid rgba(255,255,255,0.28); color:#fff;
+  font-family:inherit; font-size:12px; font-weight:700; cursor:pointer;
+}
+#wheel-paid-spin-btn:disabled { opacity:0.35; cursor:not-allowed; }
+#wheel-last-win { margin-top: 12px; font-size: 11px; color: rgba(255,255,255,0.55); border-top: 1px solid rgba(255,255,255,0.08); padding-top: 10px; }
+#wheel-last-win b { color: #fde047; }
+</style>
+</head>
+<body>
+<div id="weather-bg-layer"></div>
+<div id="weather-particles"></div>
+<div id="prism-border-frame"></div>
+<div id="app">
+  <div id="topbar">
+    <div id="clock-display">00:00</div>
+    <div id="weather-pill" onclick="openOverlay('weatherinfo-overlay')">
+      <span class="wp-emoji" id="weather-pill-emoji">☀️</span>
+      <span class="wp-timer" id="weather-pill-timer">—</span>
+    </div>
+    <div id="topbar-right">
+      <div id="autosell-indicator">📼 АВТО</div>
+      <div id="keys-display">🔑 <span id="keys-val">0</span></div>
+      <div id="fragments-display">🎫 <span id="fragments-val">0</span></div>
+      <div id="coins-display">🪙 <span id="coins-val">0</span></div>
+      <div class="topbar-icon-btn" onclick="openLeaderboard()" title="Лидеры">🏆</div>
+      <div class="topbar-icon-btn" id="profile-btn" onclick="openProfile()">
+        <img id="profile-btn-img" src="" alt="">
+        <span id="profile-btn-emoji">🌸</span>
+      </div>
+    </div>
+  </div>
+  <div id="main-content">
+    <div>
+      <div class="section-label">🌱 Грядки</div>
+      <div id="field-tabs">
+        <button class="field-tab-btn active" id="field-tab-0" onclick="switchField(0)">Поле 1</button>
+        <button class="field-tab-btn locked" id="field-tab-1" onclick="switchField(1)">🔒 Поле 2</button>
+      </div>
+      <div id="garden-grid"></div>
+    </div>
+    <div>
+      <div class="section-label">🛠️ Инструменты</div>
+      <div id="tools-row">
+        <button class="tool-btn" id="btn-water"  onclick="activateTool('water')">
+          <span class="tool-emoji">💧</span><span id="water-count"  class="tool-count">×0</span><span class="tool-label">Лейка</span>
+        </button>
+        <button class="tool-btn" id="btn-shovel" onclick="activateTool('shovel')">
+          <span class="tool-emoji">🪏</span><span id="shovel-count" class="tool-count">×0</span><span class="tool-label">Лопата</span>
+        </button>
+      </div>
+      <button id="collect-all-btn" onclick="collectAll()">🧺 Собрать все</button>
+    </div>
+    <div>
+      <div class="section-label">🎒 Инвентарь</div>
+      <div id="inventory-grid"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Right: Main Shop arrow -->
+<div id="shop-arrow-btn" class="side-btn" onclick="openShop()">
+  <span>🛒</span>
+  <span class="side-btn-label">Магазин</span>
+</div>
+
+<!-- Top-left: Quests button, floats over the garden -->
+<!-- Top-left: Garden Pass button, floats over the garden -->
+<div id="pass-fab" onclick="openPass()">
+  🌱
+  <span id="quests-fab-badge">0</span>
+</div>
+
+<!-- ═══ MAIN SHOP PANEL (right) ═══ -->
+<div id="shop-panel" class="side-panel">
+  <div class="panel-header">
+    <div class="panel-title">🛒 Магазин</div>
+    <div class="panel-coins" id="shop-coins-disp">🪙 0</div>
+    <button class="panel-close-btn" onclick="closeShop()">✕ Закрыть</button>
+  </div>
+  <div class="panel-body" id="shop-body">
+
+    <div id="prismatic-crate-card" onclick="openPrismaticCratePopup()">
+      <span class="pc-emoji">💠</span>
+      <div class="pc-info">
+        <div class="pc-title">Призматический ящик</div>
+        <div class="pc-sub" id="prismatic-crate-sub">Нужно 5 🔑 ключей — у тебя 0</div>
+      </div>
+      <button class="pc-btn" id="prismatic-crate-btn" disabled>Открыть</button>
+    </div>
+
+    <div id="wheel-card" onclick="openWheel()">
+      <span class="wc-emoji">🎡</span>
+      <div class="wc-info">
+        <div class="wc-title">Колесо Фортуны</div>
+        <div class="wc-sub" id="wheel-card-sub">3 бесплатных прокрута / 2ч</div>
+      </div>
+    </div>
+
+    <div id="prismatic-pass-shop-card" onclick="openPrismaticPassInfo()">
+      <div class="ppc-emojis"><span class="ppc-side">🔑</span><span class="ppc-main">💠</span><span class="ppc-side">🎁</span></div>
+      <div class="ppc-title">Prismatic Pass</div>
+      <div class="ppc-sub" id="prismatic-pass-shop-sub">Премиум-награды на каждом уровне пропуска</div>
+      <div class="ppc-price" id="prismatic-pass-shop-price">🪙 10 000</div>
+    </div>
+
+    <div id="shop-compensation-wrap"></div>
+
+    <div>
+      <div class="shop-section-label">🌾 Улучшения поля</div>
+      <div id="shop-upgrade-wrap"></div>
+    </div>
+    <div>
+      <div class="shop-section-label">🛠️ Инструменты</div>
+      <div id="shop-tools-row"></div>
+    </div>
+    <div>
+      <div class="shop-section-label">
+        📦 Ящики
+        <span class="crate-info-btn-label" style="margin-left:auto;font-size:14px;cursor:pointer;opacity:0.7" onclick="openOverlay('lbinfo-overlay')">ℹ️</span>
+      </div>
+      <div id="shop-crates-row"></div>
+      <div id="xp-progress-display"></div>
+    </div>
+    <div>
+      <div class="shop-section-label">🌱 Семена сезона</div>
+      <div id="shop-seeds-grid"></div>
+    </div>
+    <div id="shop-refresh-info"></div>
+  </div>
+</div>
+
+<!-- ═══ SELL POPUP ═══ -->
+<div id="sell-overlay">
+  <div id="sell-popup">
+    <span id="sell-popup-emoji">🥕</span>
+    <div id="sell-popup-title">Хотите продать?</div>
+    <div id="sell-popup-price">🪙 10 монет</div>
+    <div id="sell-popup-btns">
+      <button id="sell-yes-btn" onclick="confirmSell()">Да! ×1</button>
+      <button id="sell-no-btn"  onclick="closeSellPopup()">Нет</button>
+    </div>
+    <button id="sell-all-btn" onclick="confirmSellAll()">Продать все</button>
+  </div>
+</div>
+
+<!-- ═══ CRATE OPEN POPUP ═══ -->
+<div id="lb-open-overlay">
+  <div id="lb-open-popup">
+    <h3 id="lb-popup-heading">📦 Ящик</h3>
+    <div id="lb-box-stage" onclick="tapLootbox()">
+      <span id="lb-box-emoji">🎁</span>
+      <div id="lb-tap-dots">○○○</div>
+      <div id="lb-tap-hint">Тапни коробку 3 раза!</div>
+    </div>
+    <div id="lb-reward-stage">
+      <span id="lb-reward-emoji">🥕</span>
+      <div id="lb-reward-name"></div>
+      <div id="lb-reward-rarity"></div>
+      <div id="lb-reward-qty"></div>
+    </div>
+    <button id="lb-close-btn" onclick="closeLootboxPopup()">Забрать! 🎉</button>
+  </div>
+</div>
+
+<!-- ═══ CRATE INFO ═══ -->
+<div class="overlay-backdrop" id="lbinfo-overlay">
+  <div class="generic-popup" id="lbinfo-popup">
+    <h2>📦 Шансы Ящиков</h2>
+    <h3>📦 Бесплатный (раз в 20 мин)</h3>
+    <div class="rate-row"><span class="rate-label" style="color:#9ca3af">⬜ Обычный</span><span class="rate-val" style="color:#9ca3af">61%</span></div>
+    <div class="rate-row"><span class="rate-label" style="color:#60a5fa">🟦 Редкий</span><span class="rate-val" style="color:#60a5fa">25%</span></div>
+    <div class="rate-row"><span class="rate-label" style="color:#c084fc">🟪 Эпический</span><span class="rate-val" style="color:#c084fc">10%</span></div>
+    <div class="rate-row"><span class="rate-label" style="color:#fbbf24">🟨 Легендарный</span><span class="rate-val" style="color:#fbbf24">4%</span></div>
+    <h3>🎁 Платный (500 🪙) и 🪅 XP-ящик (100 🎫)</h3>
+    <div class="rate-row"><span class="rate-label" style="color:#9ca3af">⬜ Обычный</span><span class="rate-val" style="color:#9ca3af">40%</span></div>
+    <div class="rate-row"><span class="rate-label" style="color:#60a5fa">🟦 Редкий</span><span class="rate-val" style="color:#60a5fa">30%</span></div>
+    <div class="rate-row"><span class="rate-label" style="color:#c084fc">🟪 Эпический</span><span class="rate-val" style="color:#c084fc">20%</span></div>
+    <div class="rate-row"><span class="rate-label" style="color:#fbbf24">🟨 Легендарный</span><span class="rate-val" style="color:#fbbf24">9%</span></div>
+    <div class="rate-row"><span class="rate-label shimmer-text">🌈 Призматический</span><span class="rate-val shimmer-text">1%</span></div>
+    <p style="margin-top:12px;font-size:11px;color:rgba(255,255,255,0.4);">Тапни коробку 3 раза, чтобы вскрыть. Из ящика выпадает от 1 до 15 семян — больше для частых редкостей.</p>
+    <button class="popup-close-btn" onclick="closeOverlay('lbinfo-overlay')">Понял!</button>
+  </div>
+</div>
+
+<!-- ═══ PATCH NOTES 0.5 ═══ -->
+<div class="overlay-backdrop" id="patch-overlay">
+  <div class="generic-popup" id="patch-popup">
+    <h2>🌸 Версия 0.5 — обновление</h2>
+    <div class="patch-item"><span class="patch-dot">✦</span><span><b>Мутации переработаны:</b> теперь мутировавший урожай НЕ продаётся сам — он лежит в инвентаре отдельной подсвеченной стопкой и продаётся дороже вручную. Мутировать может <b>любое</b> растение на грядке, даже уже готовое к сбору.</span></div>
+    <div class="patch-item"><span class="patch-dot">✦</span><span>Новая редчайшая ивентовая погода <b>🔘 Призма</b> — чёрный фон, переливающаяся радужная рамка, +110% и радужная мутация.</span></div>
+    <div class="patch-item"><span class="patch-dot">✦</span><span><b>🌱 Garden Pass</b> теперь отдельное меню слева (как магазин), а квесты переехали внутрь него — кнопка «📋 Задания» сверху.</span></div>
+    <div class="patch-item"><span class="patch-dot">✦</span><span>Квесты: обновление раз в 30 минут, за выполнение всех 5 — бонус (🔑 ключ + 🪙500 + 2 платных ящика), плюс кнопка <b>🆕 Новые</b> (до 5 раз в день) даёт доп. 6-е задание.</span></div>
+    <div class="patch-item"><span class="patch-dot">✦</span><span><b>Prismatic Pass</b> теперь покупается через отдельную красивую карточку в магазине, стал заметно выгоднее Garden Pass.</span></div>
+    <div class="patch-item"><span class="patch-dot">✦</span><span>Ящики, полученные из пропуска, открываются сразу с полной анимацией — как при покупке.</span></div>
+    <div class="patch-item"><span class="patch-dot">✦</span><span>Исправлены цены редких/эпических растений (не должны быть дешевле низших редкостей), цена докрутки Колеса Фортуны поднята до 🪙500.</span></div>
+    <div class="patch-item"><span class="patch-dot">✦</span><span>Исправлены баги: зависавшая вёрстка на некоторых устройствах, монеты не обновлялись в реальном времени, выбранное семя сбрасывалось при смене поля, свайпы «протекали» через открытые окна.</span></div>
+    <button class="popup-close-btn" onclick="closeOverlay('patch-overlay')">Играть!</button>
+  </div>
+</div>
+
+<!-- ═══ PROFILE SLIDE-UP ═══ -->
+<div id="profile-overlay" onclick="if(event.target===this)closeProfile()">
+  <div id="profile-popup">
+    <div class="profile-drag-handle"></div>
+    <div id="profile-tabs">
+      <button class="profile-tab-btn active" id="profile-tab-btn-main" onclick="switchProfileTab('main')">👤 Профиль</button>
+      <button class="profile-tab-btn" id="profile-tab-btn-fav" onclick="switchProfileTab('fav')">⭐ Избранное</button>
+    </div>
+
+    <div id="profile-tab-main">
+      <div id="profile-avatar-wrap">
+        <div id="profile-avatar-ring" onclick="document.getElementById('avatar-file-input').click()">
+          <img id="profile-avatar-img" src="" alt="">
+          <span id="profile-avatar-emoji">🌸</span>
+        </div>
+        <span class="avatar-edit-hint">Нажми, чтобы изменить фото</span>
+      </div>
+      <input type="file" id="avatar-file-input" accept="image/*" style="display:none" onchange="handleAvatarChange(event)">
+      <div id="profile-fields">
+        <input class="profile-input" id="profile-nickname" type="text" placeholder="Твой никнейм" maxlength="24" autocomplete="off">
+      </div>
+      <button id="profile-save-btn" onclick="saveProfile()">✅ Сохранить профиль</button>
+      <div id="profile-stats-section">
+        <div class="profile-stats-label">📊 Статистика</div>
+        <div class="profile-stat-row">
+          <span class="profile-stat-name">Монет сейчас</span>
+          <span class="profile-stat-val" id="profile-stat-coins">🪙 0</span>
+        </div>
+        <div class="profile-stat-row">
+          <span class="profile-stat-name">Фрагментов</span>
+          <span class="profile-stat-val" id="profile-stat-fragments">🎫 0</span>
+        </div>
+        <div class="profile-stat-row">
+          <span class="profile-stat-name">Плодов в инвентаре</span>
+          <span class="profile-stat-val" id="profile-stat-plants">0</span>
+        </div>
+      </div>
+    </div>
+
+    <div id="profile-tab-fav" style="display:none">
+      <div id="favorites-grid"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ FAVORITES PICKER (choose item from inventory) ═══ -->
+<div class="overlay-backdrop" id="fav-picker-overlay">
+  <div class="generic-popup" id="fav-picker-popup">
+    <h2>⭐ Выбери растение</h2>
+    <div id="fav-picker-grid"></div>
+    <button class="popup-close-btn" onclick="closeOverlay('fav-picker-overlay')">Закрыть</button>
+  </div>
+</div>
+
+<!-- ═══ LEADERBOARD SLIDE-UP ═══ -->
+<div id="lb-list-overlay" onclick="if(event.target===this)closeLeaderboard()">
+  <div id="lb-list-popup">
+    <div id="lb-list-header">
+      <div class="lb-drag-handle"></div>
+      <div class="lb-header-row">
+        <div id="lb-list-title">🏆 Список лидеров</div>
+        <button id="lb-close-list-btn" onclick="closeLeaderboard()">✕ Закрыть</button>
+      </div>
+      <div id="lb-last-updated">Загрузка...</div>
+      <div id="lb-tabs">
+        <button class="lb-tab-btn active" id="lb-tab-season" onclick="switchLbTab('season')">🌱 Сезон</button>
+        <button class="lb-tab-btn" id="lb-tab-global" onclick="switchLbTab('global')">🌍 Глобальный</button>
+      </div>
+      <div id="lb-season-timer" style="font-size:10px;color:rgba(255,255,255,0.4);margin-top:8px;text-align:center;"></div>
+    </div>
+    <div id="lb-list-body"></div>
+  </div>
+</div>
+
+<!-- ═══ WEATHER INFO ═══ -->
+<div class="overlay-backdrop" id="weatherinfo-overlay">
+  <div class="generic-popup" id="weatherinfo-popup">
+    <h2>🌦️ Погода и мутации</h2>
+    <div class="rate-row"><span class="rate-label">☀️ Ясно</span><span class="rate-val">Без бонуса</span></div>
+    <div class="rate-row"><span class="rate-label">🌧️ Дождь</span><span class="rate-val" style="color:#93c5fd">+10%</span></div>
+    <div class="rate-row"><span class="rate-label">🍁 Листопад</span><span class="rate-val" style="color:#fdba74">+20%</span></div>
+    <div class="rate-row"><span class="rate-label">❄️ Снегопад</span><span class="rate-val" style="color:#bae6fd">+30%</span></div>
+    <div class="rate-row"><span class="rate-label">🌈 Радуга (редко)</span><span class="rate-val" style="color:#f0abfc">+70%</span></div>
+    <div class="rate-row"><span class="rate-label">🍀 Удача (редко)</span><span class="rate-val" style="color:#86efac">+110%</span></div>
+    <div class="rate-row"><span class="rate-label shimmer-text">🔘 Призма (ивент, очень редко)</span><span class="rate-val shimmer-text">+110%</span></div>
+    <p style="margin-top:12px;font-size:11px;color:rgba(255,255,255,0.5);line-height:1.5;">Погода наступает ровно в начале каждого часа и длится 10 минут. Пока она активна, <b>все</b> растения на грядках — даже уже готовые к сбору — могут получить мутацию (30% шанс). Мутировавший урожай остаётся в инвентаре отдельной стопкой с цветной отметкой и продаётся дороже на бонус погоды.</p>
+    <p style="margin-top:8px;font-size:11px;color:rgba(240,171,252,0.85);line-height:1.5;">🔘 <b>Призма особенная:</b> мутация во время неё гарантирована (100%!), а с неба изредка падают тапаемые «Дары Призмы» 💠 — лови их, пока не исчезли, за ключи, монеты или фрагменты!</p>
+    <button class="popup-close-btn" onclick="closeOverlay('weatherinfo-overlay')">Понял!</button>
+  </div>
+</div>
+
+<!-- ═══ QUESTS PANEL ═══ -->
+<div id="quests-overlay" onclick="if(event.target===this)closeQuests()">
+  <div id="quests-popup">
+    <div class="quest-top-row" style="margin-bottom:2px; align-items:flex-start;">
+      <div id="quests-header-row" style="flex:1;display:flex;align-items:center;justify-content:space-between; gap:8px;">
+        <div id="quests-title">📋 Задания</div>
+        <button id="quests-reroll-btn" onclick="rerollQuests()">
+          <span>🆕 Новые</span>
+          <span id="quests-reroll-sub">5/5</span>
+        </button>
+        <button class="panel-close-btn" onclick="closeQuests()">✕ Закрыть</button>
+      </div>
+    </div>
+    <div id="quests-refresh-timer">Обновление через —</div>
+    <div id="quests-bonus-wrap"></div>
+    <div id="quests-list"></div>
+  </div>
+</div>
+
+<!-- ═══ GARDEN / PRISMATIC PASS PANEL ═══ -->
+<div id="pass-panel" class="side-panel">
+  <div class="panel-header" style="flex-direction:column; align-items:stretch;">
+    <div id="pass-header-row">
+      <div class="panel-title">🌱 Garden Pass</div>
+      <button id="pass-quests-btn" onclick="openQuests()">
+        📋 Задания
+        <span id="pass-quests-btn-badge">0</span>
+      </button>
+      <button class="panel-close-btn" onclick="closePass()">✕ Закрыть</button>
+    </div>
+    <div id="pass-level-bar-wrap">
+      <span id="pass-level-badge">Ур. 0/35</span>
+      <div class="pass-xp-bg"><div class="pass-xp-bar" id="pass-xp-bar" style="width:0%"></div></div>
+      <span id="pass-xp-text">0/100</span>
+    </div>
+    <div id="pass-upsell-card" style="display:none">
+      <span style="font-size:26px;">💠</span>
+      <div class="pu-text">Открой <b>Prismatic Pass</b> в Магазине — доп. награды на каждом уровне + эксклюзивная 🌙 Призматическая Луна в финале!</div>
+    </div>
+  </div>
+  <div id="pass-track-scroll">
+    <div id="pass-tracks-flex">
+      <div class="pass-track-col">
+        <div class="pass-track-label free-label">🌱 Garden Pass</div>
+        <div id="pass-free-col"></div>
+      </div>
+      <div class="pass-track-col">
+        <div class="pass-track-label paid-label">💠 Prismatic Pass</div>
+        <div id="pass-paid-col"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ WHEEL OF FORTUNE ═══ -->
+<div id="wheel-overlay" onclick="if(event.target===this)closeWheel()">
+  <div id="wheel-popup">
+    <span id="wheel-close-x" onclick="closeWheel()">✕</span>
+    <h3>🎡 Колесо Фортуны</h3>
+    <div id="wheel-svg-wrap">
+      <span id="wheel-pointer">🔻</span>
+      <svg id="wheel-svg" viewBox="0 0 240 240"></svg>
+    </div>
+    <div id="wheel-spins-row">
+      <span>Прокруты:</span>
+      <span class="wheel-spin-dot" id="wheel-dot-0"></span>
+      <span class="wheel-spin-dot" id="wheel-dot-1"></span>
+      <span class="wheel-spin-dot" id="wheel-dot-2"></span>
+    </div>
+    <div id="wheel-timer-text">Следующий прокрут через —</div>
+    <button id="wheel-spin-btn" onclick="spinWheel(false)">🎡 Крутить бесплатно</button>
+    <button id="wheel-paid-spin-btn" onclick="spinWheel(true)">🪙 500 — крутить за монеты</button>
+    <div id="wheel-last-win"></div>
+  </div>
+</div>
+
+<!-- ═══ PRISMATIC CRATE OPEN (reuses lootbox-style visuals but its own overlay for extra FX) ═══ -->
+<div id="prismatic-open-overlay" class="overlay-backdrop" style="z-index:230;">
+  <div class="generic-popup" id="prismatic-open-popup" style="text-align:center;background:linear-gradient(160deg,#4c1d95,#0f172a);border-color:#f0abfc;">
+    <h2 style="color:#f0abfc;">💠 Призматический ящик</h2>
+    <div id="prismatic-box-stage" onclick="tapPrismaticCrate()" style="cursor:pointer;">
+      <span id="prismatic-box-emoji" style="font-size:88px;display:block;margin:0 auto 10px;">💠</span>
+      <div id="prismatic-tap-dots" style="font-size:22px;letter-spacing:8px;color:#f0abfc;margin-bottom:8px;">○○○</div>
+      <div id="prismatic-tap-hint" style="font-size:13px;color:rgba(255,255,255,0.55);">Тапни коробку 3 раза!</div>
+    </div>
+    <div id="prismatic-reward-stage" style="display:none;">
+      <div id="prismatic-reward-list" style="display:flex;flex-direction:column;gap:10px;margin:10px 0;"></div>
+    </div>
+    <button class="popup-close-btn" id="prismatic-close-btn" style="display:none" onclick="closePrismaticCratePopup()">Забрать! 🎉</button>
+  </div>
+</div>
+
+<!-- ═══ PRISMATIC PASS PURCHASE POPUP ═══ -->
+<div class="overlay-backdrop" id="prismatic-pass-info-overlay">
+  <div class="generic-popup" id="prismatic-pass-info-popup" style="text-align:center;">
+    <h2 style="color:#f0abfc;">Prismatic Pass</h2>
+    <div class="ppi-emojis">
+      <span class="ppi-side">🔑</span>
+      <span class="ppi-main">💠</span>
+      <span class="ppi-side">🎁</span>
+    </div>
+    <div class="ppi-rewards">
+      За весь пропуск (35 уровней) можно получить:<br>
+      • 🪙 До 7 500 монет<br>
+      • 🎁 10 платных ящиков + 🪅 5 XP-ящиков<br>
+      • 🔑 3 Призматических ключа<br>
+      • 🐉 3 семени Дракон-фрукта<br>
+      • 🎲 3 случайных эпических растения<br>
+      • 🌙 Эксклюзив в финале: Призматическая Луна
+    </div>
+    <button class="buy-btn purple-btn" id="prismatic-pass-buy-btn" style="width:100%;margin-top:16px;padding:13px;font-size:14px;" onclick="buyPrismaticPass()">Открыть за 🪙10 000</button>
+    <button class="popup-close-btn" onclick="closeOverlay('prismatic-pass-info-overlay')">Закрыть</button>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ⚠️ Серверный (настоящий, со всеми игроками) рейтинг — следующий шаг,
+// когда будешь готов. Пока лидерборд работает локально: сезон + глобал
+// считаются от твоих собственных монет и сравниваются с демо-соперниками.
+
+// ═══════════════════════════════════════════════════════════
+//  CONSTANTS & PLANT DATA
+// ═══════════════════════════════════════════════════════════
+const SHOP_REFRESH_MS = 600_000; // 10 minutes
+
+const FIELD_STAGES = [
+  { plots: 9,  cols: 3, rows: 3, label: '3×3', price: 0    },
+  { plots: 12, cols: 3, rows: 4, label: '3×4', price: 250  },
+  { plots: 16, cols: 4, rows: 4, label: '4×4', price: 750  },
+  { plots: 20, cols: 4, rows: 5, label: '4×5', price: 2000 },
+];
+const SECOND_FIELD_PRICE = 5000;
+
+const PLANTS = {
+  carrot:     { name:'Морковь',        emoji:'🥕',  growTime:5,   sellPrice:12,  seedPrice:5,   rarity:'common'    },
+  wheat:      { name:'Пшеница',        emoji:'🌾',  growTime:6,   sellPrice:14,  seedPrice:6,   rarity:'common'    },
+  tomato:     { name:'Помидор',        emoji:'🍅',  growTime:8,   sellPrice:18,  seedPrice:7,   rarity:'common'    },
+  potato:     { name:'Картофель',      emoji:'🥔',  growTime:10,  sellPrice:22,  seedPrice:9,   rarity:'common'    },
+  bean:       { name:'Фасоль',         emoji:'🫘',  growTime:12,  sellPrice:26,  seedPrice:10,  rarity:'common'    },
+  corn:       { name:'Кукуруза',       emoji:'🌽',  growTime:15,  sellPrice:32,  seedPrice:13,  rarity:'common'    },
+  onion:      { name:'Лук',            emoji:'🧅',  growTime:7,   sellPrice:16,  seedPrice:6,   rarity:'common'    },
+  melon:      { name:'Дыня',           emoji:'🍈',  growTime:13,  sellPrice:30,  seedPrice:12,  rarity:'common'    },
+  strawberry: { name:'Клубника',       emoji:'🍓',  growTime:15,  sellPrice:58,  seedPrice:23,  rarity:'rare'      },
+  cherry:     { name:'Вишня',          emoji:'🍒',  growTime:18,  sellPrice:68,  seedPrice:27,  rarity:'rare'      },
+  blueberry:  { name:'Черника',        emoji:'🫐',  growTime:20,  sellPrice:75,  seedPrice:30,  rarity:'rare'      },
+  pepper:     { name:'Перец',          emoji:'🌶️', growTime:24,  sellPrice:85,  seedPrice:34,  rarity:'rare'      },
+  eggplant:   { name:'Баклажан',       emoji:'🍆',  growTime:28,  sellPrice:98,  seedPrice:39,  rarity:'rare'      },
+  lemon:      { name:'Лимон',          emoji:'🍋',  growTime:16,  sellPrice:60,  seedPrice:24,  rarity:'rare'      },
+  pear:       { name:'Груша',          emoji:'🍐',  growTime:19,  sellPrice:70,  seedPrice:28,  rarity:'rare'      },
+  kiwi:       { name:'Киви',           emoji:'🥝',  growTime:30,  sellPrice:155, seedPrice:62,  rarity:'epic'      },
+  cactus:     { name:'Кактус',         emoji:'🌵',  growTime:35,  sellPrice:175, seedPrice:70,  rarity:'epic'      },
+  pineapple:  { name:'Ананас',         emoji:'🍍',  growTime:40,  sellPrice:195, seedPrice:78,  rarity:'epic'      },
+  peach:      { name:'Персик',         emoji:'🍑',  growTime:50,  sellPrice:230, seedPrice:92,  rarity:'epic'      },
+  watermelon: { name:'Арбуз',          emoji:'🍉',  growTime:60,  sellPrice:270, seedPrice:108, rarity:'epic'      },
+  coconut:    { name:'Кокос',          emoji:'🥥',  growTime:32,  sellPrice:165, seedPrice:66,  rarity:'epic'      },
+  dragonfruit:{ name:'Дракон-фрукт',  emoji:'🐉',  growTime:60,  sellPrice:400, seedPrice:160, rarity:'legendary' },
+  starfruit:  { name:'Звёздный плод', emoji:'🌟',  growTime:75,  sellPrice:490, seedPrice:196, rarity:'legendary' },
+  goldapple:  { name:'Золотое яблоко',emoji:'🍎',  growTime:90,  sellPrice:590, seedPrice:236, rarity:'legendary' },
+  lotus:      { name:'Лотос',          emoji:'🌺',  growTime:100, sellPrice:680, seedPrice:272, rarity:'legendary' },
+  grape:      { name:'Виноград',       emoji:'🍇',  growTime:20,  sellPrice:62,  seedPrice:25,  rarity:'rare'      },
+  avocado:    { name:'Авокадо',        emoji:'🥑',  growTime:35,  sellPrice:188, seedPrice:75,  rarity:'epic'      },
+  mango:      { name:'Манго',          emoji:'🥭',  growTime:18,  sellPrice:64,  seedPrice:26,  rarity:'rare'      },
+  nut:        { name:'Орех',           emoji:'🌰',  growTime:10,  sellPrice:6,   seedPrice:3,   rarity:'common'    },
+  orange:     { name:'Апельсин',       emoji:'🍊',  growTime:40,  sellPrice:208, seedPrice:83,  rarity:'epic'      },
+  // ── Призматические (только из платных и XP-ящиков, 1%) ──
+  moonflower:   { name:'Лунный цветок',          emoji:'🌙', growTime:1800, sellPrice:1500, seedPrice:0, rarity:'prismatic' },
+  crystallotus: { name:'Хрустальный лотос',      emoji:'🪷', growTime:1800, sellPrice:1650, seedPrice:0, rarity:'prismatic' },
+  prismsakura:  { name:'Призматическая сакура',  emoji:'🌸', growTime:1800, sellPrice:1800, seedPrice:0, rarity:'prismatic' },
+};
+const RARITY_LABELS  = { common:'Обычный', rare:'Редкий', epic:'Эпический', legendary:'Легендарный', prismatic:'Призматический' };
+const RARITY_COLORS  = { common:'#9ca3af', rare:'#60a5fa', epic:'#c084fc', legendary:'#fbbf24', prismatic:'#f472b6' };
+const RARITY_MAX_QTY = { common:50, rare:20, epic:8, legendary:2 };
+const QTY_RANGE       = { common:[5,15], rare:[3,10], epic:[2,6], legendary:[1,3], prismatic:[1,1] };
+const TOOL_SHOP = [
+  { id:'wateringcan', invKey:'tool_water',  name:'Лейка',  emoji:'💧', price:15, stockKey:'toolWater'  },
+  { id:'shovel',      invKey:'tool_shovel', name:'Лопата', emoji:'🪏', price:20, stockKey:'toolShovel' },
+];
+const CRATE_TYPES = {
+  free: { name:'Бесплатный', emoji:'📦', cooldownMs:1_200_000, costType:'free',  costAmount:0,
+          odds:{ common:61, rare:25, epic:10, legendary:4 } },
+  paid: { name:'Платный',    emoji:'🎁', cooldownMs:0,         costType:'coins', costAmount:500,
+          odds:{ common:40, rare:30, epic:20, legendary:9, prismatic:1 } },
+  xp:   { name:'XP-ящик',    emoji:'🪅', cooldownMs:0,         costType:'xp',    costAmount:1,
+          odds:{ common:40, rare:30, epic:20, legendary:9, prismatic:1 } },
+};
+const BONUS_KEY_DROP_CHANCE = 0.05; // paid/xp crates have a 5% bonus chance to also drop a 🔑 key
+
+// ═══════════════════════════════════════════════════════════
+//  v0.5 — WEATHER & MUTATIONS
+// ═══════════════════════════════════════════════════════════
+const WEATHER_TYPES = {
+  clear:   { name:'Ясно',     emoji:'☀️', bonus:0,   bg:null },
+  rain:    { name:'Дождь',    emoji:'🌧️', bonus:10,  bg:'linear-gradient(170deg,#64748b 0%,#475569 45%,#334155 100%)', particle:'💧' },
+  leaves:  { name:'Листопад', emoji:'🍁', bonus:20,  bg:'linear-gradient(170deg,#c2703d 0%,#92400e 45%,#5c2e0a 100%)', particle:'🍂' },
+  snow:    { name:'Снегопад', emoji:'❄️', bonus:30,  bg:'linear-gradient(170deg,#e0f2fe 0%,#93c5fd 45%,#60a5fa 100%)', particle:'❄️' },
+  rainbow: { name:'Радуга',   emoji:'🌈', bonus:70,  bg:'rainbow' },
+  luck:    { name:'Удача',    emoji:'🍀', bonus:110, bg:'linear-gradient(170deg,#fde68a 0%,#f59e0b 45%,#b45309 100%)' },
+  prism:   { name:'Призма',   emoji:'🔘', bonus:110, bg:'prism' },
+};
+// Visuals used to tint a mutated plant/inv-slot per weather type it mutated under.
+const MUTATION_VISUALS = {
+  rain:    { css:'mut-rain',    label:'Дождь'    },
+  leaves:  { css:'mut-leaves',  label:'Листопад' },
+  snow:    { css:'mut-snow',    label:'Снегопад' },
+  rainbow: { css:'mut-rainbow', label:'Радуга'   },
+  luck:    { css:'mut-luck',    label:'Удача'    },
+  prism:   { css:'mut-prism',   label:'Призма'   },
+};
+const WEATHER_NORMAL_POOL = ['clear','rain','leaves','snow'];
+const WEATHER_DURATION_MS = 10*60*1000;
+const MUTATION_CHANCE = 0.30;
+
+function seededRandom(seed) {
+  const x = Math.sin(seed) * 10000;
+  return x - Math.floor(x);
+}
+// Deterministic weather pick for a given hour-epoch, so it stays stable across re-renders.
+function pickWeatherForHour(hourEpoch) {
+  const rPrism = seededRandom(hourEpoch * 133.771 + 2);
+  if (rPrism < 0.05) return 'prism';
+  const rLuck = seededRandom(hourEpoch * 91.731 + 3);
+  if (rLuck < 0.10) return 'luck';
+  const rRainbow = seededRandom(hourEpoch * 41.113 + 7);
+  if (rRainbow < 0.25) return 'rainbow';
+  const rNormal = seededRandom(hourEpoch * 17.919 + 11);
+  return WEATHER_NORMAL_POOL[Math.floor(rNormal * WEATHER_NORMAL_POOL.length)];
+}
+function getWeatherState() {
+  const now = new Date();
+  const hourEpoch = Math.floor(now.getTime() / 3600000);
+  const minutes = now.getMinutes(), seconds = now.getSeconds();
+  const secondsIntoHour = minutes*60 + seconds;
+  const active = minutes < 10;
+  if (active) {
+    return { type: pickWeatherForHour(hourEpoch), active: true, timeLeftMs: WEATHER_DURATION_MS - secondsIntoHour*1000, windowId: hourEpoch };
+  }
+  return { type: 'clear', active: false, timeLeftMs: 3600000 - secondsIntoHour*1000, windowId: hourEpoch };
+}
+
+// ═══════════════════════════════════════════════════════════
+//  v0.5 — QUESTS
+// ═══════════════════════════════════════════════════════════
+const QUEST_REFRESH_MS = 30 * 60 * 1000;
+const QUEST_REROLL_COOLDOWN_MS = 30 * 60 * 1000;
+const QUEST_REROLL_MAX_PER_DAY = 5;
+const QUEST_ALL_DONE_BONUS = { keys: 1, coins: 500, paidCrates: 2 };
+const QUEST_TEMPLATES = [
+  { id:'harvest', icon:'🧺', mk:(t)=>`Собери урожай ×${t}`,        target:()=>randInt(5,20)  },
+  { id:'plant',   icon:'🌱', mk:(t)=>`Посади семян ×${t}`,          target:()=>randInt(5,20)  },
+  { id:'sellcoins',icon:'💰', mk:(t)=>`Заработай продажей 🪙${t}`,   target:()=>randInt(80,400) },
+  { id:'crate',   icon:'📦', mk:(t)=>`Открой ящиков ×${t}`,         target:()=>randInt(1,3)   },
+  { id:'tool',    icon:'🛠️', mk:(t)=>`Используй инструмент ×${t}`,  target:()=>randInt(3,10)  },
+  { id:'spin',    icon:'🎡', mk:(t)=>`Крутани колесо фортуны ×${t}`,target:()=>randInt(1,3)   },
+  { id:'fragments',icon:'🎫', mk:(t)=>`Собери 🎫 фрагментов ×${t}`,  target:()=>randInt(15,60) },
+];
+function newQuestFromTemplate(tpl, isBonusSlot) {
+  const target = tpl.target();
+  return { id: tpl.id, icon: tpl.icon, desc: tpl.mk(target), target, progress: 0,
+           reward: randInt(10,50), claimed: false, isBonusSlot: !!isBonusSlot };
+}
+function generateQuests() {
+  const shuffled = [...QUEST_TEMPLATES].sort(()=>Math.random()-0.5).slice(0,5);
+  return shuffled.map(t => newQuestFromTemplate(t));
+}
+function questsDayKey() { const d = new Date(); return d.getFullYear()+'-'+d.getMonth()+'-'+d.getDate(); }
+function ensureQuestRerollDay() {
+  const key = questsDayKey();
+  if (state.quests.rerollDayKey !== key) { state.quests.rerollDayKey = key; state.quests.rerollsUsedToday = 0; saveState(); }
+}
+function maybeRefreshQuests() {
+  ensureQuestRerollDay();
+  const now = Date.now();
+  if (now - state.quests.lastRefresh >= QUEST_REFRESH_MS || !state.quests.list.length) {
+    state.quests.list = generateQuests();
+    state.quests.lastRefresh = now;
+    state.quests.bonusClaimed = false;
+    saveState();
+  }
+}
+function rerollQuests() {
+  ensureQuestRerollDay();
+  const now = Date.now();
+  if (state.quests.rerollsUsedToday >= QUEST_REROLL_MAX_PER_DAY) { showToast('Лимит обновлений на сегодня исчерпан!'); return; }
+  const cd = QUEST_REROLL_COOLDOWN_MS - (now - (state.quests.lastRerollAt||0));
+  if (state.quests.lastRerollAt && cd > 0) { showToast('⏳ Перезарядка: ' + fmtMs(cd)); return; }
+  state.quests.list = generateQuests();
+  const bonusTpl = QUEST_TEMPLATES[Math.floor(Math.random()*QUEST_TEMPLATES.length)];
+  state.quests.list.push(newQuestFromTemplate(bonusTpl, true));
+  state.quests.lastRefresh = now;
+  state.quests.bonusClaimed = false;
+  state.quests.rerollsUsedToday++;
+  state.quests.lastRerollAt = now;
+  saveState(); renderQuests(); updateQuestsFabBadge();
+  showToast('🆕 Квесты обновлены! +1 доп. задание');
+}
+function questProgress(id, amount) {
+  if (amount <= 0) return;
+  let changed = false;
+  state.quests.list.forEach(q => {
+    if (q.claimed) return;
+    if (q.id === id) { q.progress = Math.min(q.target, q.progress + amount); changed = true; }
+  });
+  if (changed) { saveState(); updateQuestsFabBadge(); if (document.getElementById('quests-overlay').classList.contains('open')) renderQuests(); }
+}
+function questsAllBaseDone() {
+  const base = state.quests.list.slice(0,5);
+  return base.length >= 5 && base.every(q => q.claimed);
+}
+function updateQuestsFabBadge() {
+  const claimable = state.quests.list.filter(q => !q.claimed && q.progress >= q.target).length
+    + (questsAllBaseDone() && !state.quests.bonusClaimed ? 1 : 0);
+  const badge = document.getElementById('quests-fab-badge');
+  if (badge) { badge.textContent = claimable; badge.classList.toggle('show', claimable > 0); }
+  const passBadge = document.getElementById('pass-quests-btn-badge');
+  if (passBadge) { passBadge.textContent = claimable; passBadge.classList.toggle('show', claimable > 0); }
+}
+function claimQuest(idx) {
+  const q = state.quests.list[idx];
+  if (!q || q.claimed || q.progress < q.target) return;
+  q.claimed = true;
+  grantPassXp(q.reward);
+  saveState(); renderQuests(); updateQuestsFabBadge(); renderCoins(); playSound('buy');
+  showToast(`✅ Задание выполнено! +${q.reward} 🧩 опыта`);
+}
+function claimQuestsBonus() {
+  if (state.quests.bonusClaimed || !questsAllBaseDone()) return;
+  state.quests.bonusClaimed = true;
+  state.keys += QUEST_ALL_DONE_BONUS.keys;
+  addCoins(QUEST_ALL_DONE_BONUS.coins);
+  for (let i=0; i<QUEST_ALL_DONE_BONUS.paidCrates; i++) rollCrateReward('paid');
+  saveState(); renderQuests(); updateQuestsFabBadge(); renderCoins(); renderInventory(); playSound('buy');
+  showToast(`🎁 Бонус за все задания: 🔑${QUEST_ALL_DONE_BONUS.keys} + 🪙${QUEST_ALL_DONE_BONUS.coins} + 🎁×${QUEST_ALL_DONE_BONUS.paidCrates} платных ящика!`);
+}
+
+// ═══════════════════════════════════════════════════════════
+//  v0.5 — GARDEN PASS / PRISMATIC PASS
+// ═══════════════════════════════════════════════════════════
+const PASS_MAX_LEVEL = 35;
+const PASS_XP_PER_LEVEL = 100;
+const PRISMATIC_PASS_PRICE = 10000;
+
+function seedR(plantKey, qty) { return { type:'seed', plantKey, qty, emoji: PLANTS[plantKey].emoji, label: PLANTS[plantKey].name }; }
+function coinsR(amount) { return { type:'coins', amount, emoji:'🪙', label:'Монеты' }; }
+function fragR(amount)  { return { type:'fragments', amount, emoji:'🎫', label:'Фрагменты' }; }
+function toolR(kind, amount) { return { type:'tool', kind, amount, emoji: kind==='water'?'💧':'🪏', label: kind==='water'?'Лейка':'Лопата' }; }
+function crateR(kind) { const map={free:['📦','Бесплатный ящик'],paid:['🎁','Платный ящик'],xp:['🪅','XP-ящик']}; return { type:'crate', kind, amount:1, emoji:map[kind][0], label:map[kind][1] }; }
+function keyR(amount) { return { type:'keys', amount, emoji:'🔑', label:'Призматический ключ' }; }
+function epicRandomR(qty) { return { type:'epic_random', qty, emoji:'🎲', label:'Случайное эпическое' }; }
+
+const COMMON_POOL = Object.keys(PLANTS).filter(k=>PLANTS[k].rarity==='common');
+const RARE_POOL   = Object.keys(PLANTS).filter(k=>PLANTS[k].rarity==='rare');
+const EPIC_POOL   = Object.keys(PLANTS).filter(k=>PLANTS[k].rarity==='epic');
+
+// Garden Pass (free) — deliberately low-variety: only 100/500 coins, mostly free crates
+// with a handful of paid crates, tools and basic seeds sprinkled in.
+function buildFreeRewards() {
+  const r = [
+    coinsR(100), crateR('free'), toolR('water',2), coinsR(500), crateR('free'),
+    seedR('carrot',6), coinsR(100), crateR('free'), toolR('shovel',2), coinsR(500),
+    crateR('paid'), crateR('free'), seedR('wheat',6), coinsR(100), crateR('free'),
+    toolR('water',2), coinsR(500), crateR('paid'), crateR('free'), seedR('tomato',6),
+    coinsR(100), crateR('free'), toolR('shovel',2), coinsR(500), crateR('paid'),
+    crateR('free'), seedR('onion',6), coinsR(100), crateR('free'), toolR('water',3),
+    coinsR(500), crateR('paid'), crateR('free'), crateR('paid'),
+  ];
+  r.push({ type:'final_free', emoji:'🐉', label:'Дракон-фрукт + 300 🎫', amount:300, plantKey:'dragonfruit', qty:1 });
+  return r; // 34 + final = 35
+}
+// Prismatic Pass (paid) — noticeably better: bigger coin drops (500/1000), mostly paid + XP crates,
+// plus keys, epic plants and dragonfruit seeds you simply can't get on the free track.
+function buildPaidRewards() {
+  const r = [
+    coinsR(500), crateR('paid'), crateR('paid'), coinsR(1000), crateR('xp'),
+    epicRandomR(2), coinsR(500), crateR('paid'), keyR(1), coinsR(1000),
+    crateR('paid'), crateR('xp'), seedR('dragonfruit',1), coinsR(500), crateR('paid'),
+    coinsR(1000), crateR('xp'), epicRandomR(2), coinsR(500), crateR('paid'),
+    keyR(1), coinsR(1000), crateR('paid'), crateR('xp'), seedR('dragonfruit',1),
+    crateR('paid'), crateR('paid'), coinsR(1000), crateR('xp'), epicRandomR(2),
+    coinsR(500), crateR('paid'), keyR(1), seedR('dragonfruit',1),
+  ];
+  r.push({ type:'final_paid', emoji:'🌙', label:'Призматическая Луна + 🪙1000', amount:1000, plantKey:'moonflower', qty:1 });
+  return r; // 34 + final = 35
+}
+const PASS_FREE_REWARDS = buildFreeRewards();
+const PASS_PAID_REWARDS = buildPaidRewards();
+
+function grantPassXp(amount) {
+  if (amount <= 0) return;
+  state.pass.xp += amount;
+  saveState();
+}
+function passLevel() { return Math.min(PASS_MAX_LEVEL, Math.floor(state.pass.xp / PASS_XP_PER_LEVEL)); }
+function passXpIntoLevel() { return state.pass.xp - passLevel()*PASS_XP_PER_LEVEL; }
+function grantPassReward(r) {
+  switch (r.type) {
+    case 'coins': addCoins(r.amount); break;
+    case 'fragments': state.fragments += r.amount; while (state.fragments>=100){state.fragments-=100; state.xpCrates++;} break;
+    case 'tool': state.inventory[r.kind==='water'?'tool_water':'tool_shovel'] = (state.inventory[r.kind==='water'?'tool_water':'tool_shovel']||0)+r.amount; break;
+    case 'seed': state.inventory['seed_'+r.plantKey] = (state.inventory['seed_'+r.plantKey]||0)+r.qty; break;
+    case 'keys': state.keys += r.amount; break;
+    case 'epic_random': { for(let i=0;i<r.qty;i++){ const k=EPIC_POOL[Math.floor(Math.random()*EPIC_POOL.length)]; state.inventory['seed_'+k]=(state.inventory['seed_'+k]||0)+1; } break; }
+    case 'final_free': state.fragments += r.amount; while (state.fragments>=100){state.fragments-=100; state.xpCrates++;} state.inventory['seed_'+r.plantKey]=(state.inventory['seed_'+r.plantKey]||0)+r.qty; break;
+    case 'final_paid': addCoins(r.amount); state.inventory['seed_'+r.plantKey]=(state.inventory['seed_'+r.plantKey]||0)+r.qty; break;
+  }
+}
+function claimPassLevel(track, level) {
+  const arr = track==='free' ? PASS_FREE_REWARDS : PASS_PAID_REWARDS;
+  const claimedArr = track==='free' ? state.pass.freeClaimed : state.pass.paidClaimed;
+  if (track==='paid' && !state.pass.paidUnlocked) { showToast('💠 Сначала открой Prismatic Pass!'); return; }
+  if (level > passLevel()) return;
+  if (claimedArr.includes(level)) return;
+  const r = arr[level-1];
+  claimedArr.push(level);
+  saveState();
+  // Crate rewards open immediately with the full reveal animation, just like buying one.
+  if (r.type === 'crate') {
+    grantAndRevealCrate(r.kind, `🎫 Награда пропуска — ${r.label}`);
+    renderPass();
+    return;
+  }
+  grantPassReward(r);
+  saveState(); renderCoins(); renderInventory(); renderPass(); playSound('buy');
+  const qtyTxt = r.qty ? ` ×${r.qty}` : (r.amount && r.type!=='final_free' && r.type!=='final_paid' ? ` ×${r.amount}` : '');
+  showToast(`🎉 Получено: ${r.label}${qtyTxt}`);
+}
+function buyPrismaticPass() {
+  if (state.pass.paidUnlocked) return;
+  if (state.coins < PRISMATIC_PASS_PRICE) { showToast('Недостаточно монет!'); return; }
+  state.coins -= PRISMATIC_PASS_PRICE; state.pass.paidUnlocked = true;
+  saveState(); renderCoins(); renderPass(); playSound('buy');
+  updatePrismaticPassShopCard();
+  closeOverlay('prismatic-pass-info-overlay');
+  showToast('💠 Prismatic Pass открыт! Забирай награды на пройденных уровнях в Garden Pass.');
+}
+function updatePrismaticPassShopCard() {
+  const sub = document.getElementById('prismatic-pass-shop-sub');
+  const price = document.getElementById('prismatic-pass-shop-price');
+  const buyBtn = document.getElementById('prismatic-pass-buy-btn');
+  if (state.pass.paidUnlocked) {
+    if (sub) sub.textContent = 'Уже открыт — забирай награды в Garden Pass!';
+    if (price) { price.textContent = '✅ Открыто'; price.classList.add('owned'); }
+    if (buyBtn) { buyBtn.disabled = true; buyBtn.textContent = 'Уже открыт ✓'; }
+  } else {
+    if (sub) sub.textContent = 'Премиум-награды на каждом уровне пропуска';
+    if (price) { price.textContent = '🪙 ' + PRISMATIC_PASS_PRICE.toLocaleString('ru-RU'); price.classList.remove('owned'); }
+    if (buyBtn) { buyBtn.disabled = false; buyBtn.textContent = 'Открыть за 🪙' + PRISMATIC_PASS_PRICE.toLocaleString('ru-RU'); }
+  }
+}
+function openPrismaticPassInfo() {
+  updatePrismaticPassShopCard();
+  openOverlay('prismatic-pass-info-overlay');
+}
+
+// ═══════════════════════════════════════════════════════════
+//  v0.5 — WHEEL OF FORTUNE
+// ═══════════════════════════════════════════════════════════
+const WHEEL_MAX_SPINS = 3;
+const WHEEL_REGEN_MS  = 40*60*1000; // 3 spins per 2h
+const WHEEL_SLOT_REFRESH_MS = 24*3600*1000;
+const WHEEL_PAID_SPIN_COST = 500;
+// 7 normal slots (sum 92%) + 1 guaranteed prismatic slot (8%)
+const WHEEL_SLOT_TEMPLATES = [
+  { rarity:'common',    chance:26, qtyRange:[5,15] },
+  { rarity:'common',    chance:22, qtyRange:[5,15] },
+  { rarity:'rare',      chance:18, qtyRange:[3,10] },
+  { rarity:'rare',      chance:12, qtyRange:[3,10] },
+  { rarity:'epic',      chance:8,  qtyRange:[2,6]  },
+  { rarity:'epic',      chance:4,  qtyRange:[2,6]  },
+  { rarity:'legendary', chance:2,  qtyRange:[1,2]  },
+];
+function generateWheelSlots() {
+  const slots = WHEEL_SLOT_TEMPLATES.map(t => {
+    const pool = t.rarity==='common'?COMMON_POOL: t.rarity==='rare'?RARE_POOL: t.rarity==='epic'?EPIC_POOL: Object.keys(PLANTS).filter(k=>PLANTS[k].rarity==='legendary');
+    const plantKey = pool[Math.floor(Math.random()*pool.length)];
+    const qty = randInt(t.qtyRange[0], t.qtyRange[1]);
+    return { type:'seed', plantKey, qty, chance:t.chance };
+  });
+  slots.push({ type:'prismatic', chance:8 });
+  // shuffle
+  for (let i=slots.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [slots[i],slots[j]]=[slots[j],slots[i]]; }
+  return slots;
+}
+function maybeRefreshWheelSlots() {
+  const now = Date.now();
+  if (now - state.wheel.lastSlotRefresh >= WHEEL_SLOT_REFRESH_MS || !state.wheel.slots.length) {
+    state.wheel.slots = generateWheelSlots();
+    state.wheel.lastSlotRefresh = now;
+    saveState();
+  }
+}
+function regenWheelSpins() {
+  const w = state.wheel;
+  if (!w.lastRegenAt) w.lastRegenAt = Date.now();
+  if (w.spins >= WHEEL_MAX_SPINS) { w.lastRegenAt = Date.now(); return; }
+  const elapsed = Date.now() - w.lastRegenAt;
+  const gained = Math.floor(elapsed / WHEEL_REGEN_MS);
+  if (gained > 0) {
+    w.spins = Math.min(WHEEL_MAX_SPINS, w.spins + gained);
+    w.lastRegenAt += gained * WHEEL_REGEN_MS;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+//  v0.5 — PRISMATIC CRATE (event)
+// ═══════════════════════════════════════════════════════════
+const PRISMATIC_CRATE_KEY_COST = 5;
+function rollPrismaticCrateRewards() {
+  const rewards = [];
+  const leaningOdds = { common:10, rare:40, epic:35, legendary:15 };
+  for (let i=0;i<3;i++) {
+    const rarity = rollRarityFromOdds(leaningOdds);
+    const pool = Object.keys(PLANTS).filter(k=>PLANTS[k].rarity===rarity);
+    const plantKey = pool[Math.floor(Math.random()*pool.length)];
+    rewards.push({ plantKey, qty: randInt(10,25) });
+  }
+  const prismPool = Object.keys(PLANTS).filter(k=>PLANTS[k].rarity==='prismatic');
+  const prismKey = prismPool[Math.floor(Math.random()*prismPool.length)];
+  rewards.push({ plantKey: prismKey, qty: randInt(1,3), guaranteed:true });
+  return rewards;
+}
+
+// ═══════════════════════════════════════════════════════════
+//  STATE
+// ═══════════════════════════════════════════════════════════
+const SEASON_LENGTH_MS = 24 * 3600 * 1000; // сезон сбрасывается раз в сутки
+function freshField() { return { plots: Array(9).fill(null), level: 0, unlocked: true }; }
+let state = {
+  coins: 0,
+  fragments: 0,
+  xpCrates: 0,
+  totalCoinsEarned: 0,           // 🌍 не сбрасывается — для глобального рейтинга
+  season: { coinsEarned: 0, startedAt: 0 }, // 🌱 сбрасывается раз в сутки
+  activeField: 0,
+  fields: [ freshField(), { plots: Array(9).fill(null), level: 0, unlocked: false } ],
+  inventory: {},
+  favorites: {},
+  autoSeller: false,
+  hasAutoSeller: false,
+  shopState: {
+    seeds: [], toolWater: 30, toolShovel: 15, lastRefresh: 0,
+    freeCrateLastOpened: 0,
+  },
+  compensation: { claimed:false, deadline:0 },
+
+  // ── v0.5 additions ──
+  keys: 0,                                   // 🔑 Призматические ключи
+  quests: { list: [], lastRefresh: 0, rerollsUsedToday: 0, lastRerollAt: 0, rerollDayKey: '', bonusClaimed: false },
+  pass: { xp: 0, freeClaimed: [], paidClaimed: [], paidUnlocked: false },
+  wheel: { spins: 3, lastRegenAt: 0, slots: [], lastSlotRefresh: 0, lastWin: null },
+};
+
+let activeTool      = null;
+let selectedSeedKey = null;
+let sellTarget      = null;
+let shopPanelOpen   = false;
+let shopJustRefreshed = false;
+
+// Crate popup state
+let crateTypeKeyOpen = null;
+let lbPopupTaps = 0;
+
+// ═══════════════════════════════════════════════════════════
+//  PERSISTENCE  (key: bloom_v5, migrates from bloom_v4/v3)
+// ═══════════════════════════════════════════════════════════
+function saveState() {
+  try { localStorage.setItem('bloom_v6', JSON.stringify(state)); } catch(_) {}
+}
+function migrateOldSave() {
+  try {
+    const raw = localStorage.getItem('bloom_v4') || localStorage.getItem('bloom_v3');
+    if (!raw) return;
+    const s = JSON.parse(raw);
+    if (typeof s.coins === 'number') { state.coins = s.coins; state.totalCoinsEarned = s.coins; }
+    if (s.inventory) state.inventory = s.inventory;
+    if (typeof s.autoSeller === 'boolean') state.autoSeller = s.autoSeller;
+    if (typeof s.hasAutoSeller === 'boolean') state.hasAutoSeller = s.hasAutoSeller;
+    if (Array.isArray(s.plots)) {
+      state.fields[0].plots = s.plots;
+      const validCounts = FIELD_STAGES.map(u => u.plots);
+      const lvlIdx = validCounts.indexOf(s.plotCount);
+      state.fields[0].level = lvlIdx >= 0 ? lvlIdx : 0;
+    }
+    if (s.shopState) {
+      state.shopState.seeds       = s.shopState.seeds || [];
+      state.shopState.toolWater   = s.shopState.toolWater ?? 30;
+      state.shopState.toolShovel  = s.shopState.toolShovel ?? 15;
+      state.shopState.lastRefresh = s.shopState.lastRefresh || 0;
+    }
+  } catch(_) {}
+}
+function loadState() {
+  try {
+    let raw = localStorage.getItem('bloom_v6');
+    if (!raw) {
+      // migrate from v5 (pre-0.5) if present
+      const oldRaw = localStorage.getItem('bloom_v5');
+      if (!oldRaw) { migrateOldSave(); return; }
+      raw = oldRaw;
+    }
+    const s = JSON.parse(raw);
+    if (typeof s.coins      === 'number')  state.coins      = s.coins;
+    if (typeof s.fragments  === 'number')  state.fragments  = s.fragments;
+    if (typeof s.xpCrates   === 'number')  state.xpCrates   = s.xpCrates;
+    if (typeof s.totalCoinsEarned === 'number') state.totalCoinsEarned = s.totalCoinsEarned;
+    if (s.season && typeof s.season.coinsEarned === 'number') state.season = s.season;
+    if (typeof s.activeField=== 'number')  state.activeField= s.activeField;
+    if (Array.isArray(s.fields) && s.fields.length === 2) state.fields = s.fields;
+    if (s.inventory)  state.inventory = s.inventory;
+    if (s.favorites)  state.favorites = s.favorites;
+    if (typeof s.autoSeller    === 'boolean') state.autoSeller    = s.autoSeller;
+    if (typeof s.hasAutoSeller === 'boolean') state.hasAutoSeller = s.hasAutoSeller;
+    if (s.shopState) state.shopState = Object.assign({}, state.shopState, s.shopState);
+    if (s.compensation) state.compensation = s.compensation;
+    if (typeof s.keys === 'number') state.keys = s.keys;
+    if (s.quests) state.quests = Object.assign({}, state.quests, s.quests);
+    if (s.pass)   state.pass   = Object.assign({}, state.pass, s.pass);
+    if (s.wheel)  state.wheel  = Object.assign({}, state.wheel, s.wheel);
+    // sanity clamps
+    state.fields.forEach(f => {
+      if (typeof f.level !== 'number' || f.level < 0 || f.level >= FIELD_STAGES.length) f.level = 0;
+      if (!Array.isArray(f.plots)) f.plots = Array(FIELD_STAGES[f.level].plots).fill(null);
+    });
+    if (state.activeField !== 0 && state.activeField !== 1) state.activeField = 0;
+  } catch(_) {}
+}
+function normalizeField(idx) {
+  const f = state.fields[idx], stage = FIELD_STAGES[f.level];
+  while (f.plots.length < stage.plots) f.plots.push(null);
+}
+function curField()  { return state.fields[state.activeField]; }
+function curPlots()  { return curField().plots; }
+function curStage()  { return FIELD_STAGES[curField().level]; }
+
+// ═══════════════════════════════════════════════════════════
+//  SOUNDS  (Web Audio API)
+// ═══════════════════════════════════════════════════════════
+let _ac;
+function getAC() {
+  if (!_ac) _ac = new (window.AudioContext || window.webkitAudioContext)();
+  if (_ac.state === 'suspended') _ac.resume();
+  return _ac;
+}
+function playSound(type) {
+  try {
+    const ac = getAC(), now = ac.currentTime;
+    if (type === 'plant') {
+      const o = ac.createOscillator(), g = ac.createGain();
+      o.connect(g); g.connect(ac.destination);
+      o.frequency.setValueAtTime(880, now);
+      o.frequency.exponentialRampToValueAtTime(440, now + 0.1);
+      g.gain.setValueAtTime(0.22, now);
+      g.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+      o.start(now); o.stop(now + 0.11);
+    } else if (type === 'harvest') {
+      [0, 0.07, 0.15].forEach((t, i) => {
+        const o = ac.createOscillator(), g = ac.createGain();
+        o.connect(g); g.connect(ac.destination);
+        o.frequency.value = [523, 659, 784][i];
+        g.gain.setValueAtTime(0.2, now + t);
+        g.gain.exponentialRampToValueAtTime(0.001, now + t + 0.14);
+        o.start(now + t); o.stop(now + t + 0.15);
+      });
+    } else if (type === 'buy') {
+      [0, 0.07, 0.14, 0.22].forEach((t, i) => {
+        const o = ac.createOscillator(), g = ac.createGain();
+        o.type = 'square'; o.connect(g); g.connect(ac.destination);
+        o.frequency.value = [330, 440, 554, 659][i];
+        g.gain.setValueAtTime(0.1, now + t);
+        g.gain.exponentialRampToValueAtTime(0.001, now + t + 0.12);
+        o.start(now + t); o.stop(now + t + 0.13);
+      });
+    } else if (type === 'sell') {
+      [0, 0.06].forEach((t, i) => {
+        const o = ac.createOscillator(), g = ac.createGain();
+        o.type = 'triangle'; o.connect(g); g.connect(ac.destination);
+        o.frequency.value = [660, 990][i];
+        g.gain.setValueAtTime(0.18, now + t);
+        g.gain.exponentialRampToValueAtTime(0.001, now + t + 0.1);
+        o.start(now + t); o.stop(now + t + 0.11);
+      });
+    } else if (type === 'mutation') {
+      [0, 0.09, 0.18].forEach((t, i) => {
+        const o = ac.createOscillator(), g = ac.createGain();
+        o.type = 'sine'; o.connect(g); g.connect(ac.destination);
+        o.frequency.value = [740, 988, 1318][i];
+        g.gain.setValueAtTime(0.16, now + t);
+        g.gain.exponentialRampToValueAtTime(0.001, now + t + 0.16);
+        o.start(now + t); o.stop(now + t + 0.17);
+      });
+    } else if (type === 'lootbox') {
+      const len = Math.floor(ac.sampleRate * 0.35);
+      const buf = ac.createBuffer(1, len, ac.sampleRate);
+      const d = buf.getChannelData(0);
+      for (let i = 0; i < len; i++) d[i] = (Math.random()*2-1) * Math.exp(-i/(len*0.15));
+      const src = ac.createBufferSource(), g = ac.createGain();
+      src.buffer = buf; src.connect(g); g.connect(ac.destination);
+      g.gain.value = 0.35; src.start(now); src.stop(now + 0.35);
+      const o = ac.createOscillator(), g2 = ac.createGain();
+      o.frequency.value = 2400; o.connect(g2); g2.connect(ac.destination);
+      g2.gain.setValueAtTime(0.28, now);
+      g2.gain.exponentialRampToValueAtTime(0.001, now + 0.28);
+      o.start(now); o.stop(now + 0.28);
+    }
+  } catch(_) {}
+}
+
+// ═══════════════════════════════════════════════════════════
+//  INVENTORY HELPERS
+// ═══════════════════════════════════════════════════════════
+function invAdd(key, n)    { state.inventory[key] = (state.inventory[key]||0)+n; saveState(); renderInventory(); }
+function invRemove(key, n) { state.inventory[key] = Math.max(0,(state.inventory[key]||0)-n); if(!state.inventory[key]) delete state.inventory[key]; saveState(); renderInventory(); }
+function invGet(key)       { return state.inventory[key]||0; }
+function isSeedKey(k)      { return k.startsWith('seed_'); }
+function isMutKey(k)       { return k.startsWith('mut_'); }
+function mutMeta(k)        { const rest = k.slice(4); const us = rest.indexOf('_'); return { weatherType: rest.slice(0,us), plantKey: rest.slice(us+1) }; }
+function makeMutKey(weatherType, plantKey) { return `mut_${weatherType}_${plantKey}`; }
+function fruitKey(k)       { if (isSeedKey(k)) return k.slice(5); if (isMutKey(k)) return mutMeta(k).plantKey; return k; }
+function effectiveSellPrice(key) {
+  const plant = PLANTS[fruitKey(key)]; if (!plant) return 0;
+  if (isMutKey(key)) {
+    const wt = WEATHER_TYPES[mutMeta(key).weatherType];
+    return Math.round(plant.sellPrice * (1 + (wt?wt.bonus:0)/100));
+  }
+  return plant.sellPrice;
+}
+
+// Начисление монет — параллельно копит сезонную и глобальную статистику для рейтингов.
+// Траты (state.coins -= ...) НЕ влияют на рейтинг, чтобы покупки не портили позицию.
+function addCoins(amount) {
+  if (amount <= 0) { state.coins += amount; return; }
+  state.coins += amount;
+  state.totalCoinsEarned += amount;
+  state.season.coinsEarned += amount;
+}
+
+function favoriteItem(key) {
+  const cnt = invGet(key); if (cnt<=0) return;
+  state.favorites[key] = (state.favorites[key]||0) + cnt;
+  delete state.inventory[key];
+  saveState(); renderInventory(); renderFavorites();
+  showToast('⭐ Перемещено в избранное');
+}
+function unfavoriteItem(key) {
+  const cnt = state.favorites[key]||0; if (cnt<=0) return;
+  state.inventory[key] = (state.inventory[key]||0) + cnt;
+  delete state.favorites[key];
+  saveState(); renderInventory(); renderFavorites();
+  showToast('📦 Возвращено в инвентарь');
+}
+function openFavPicker() {
+  const grid = document.getElementById('fav-picker-grid');
+  const keys = Object.keys(state.inventory).filter(k => !k.startsWith('tool_') && state.inventory[k] > 0 && PLANTS[fruitKey(k)]);
+  if (!keys.length) {
+    grid.innerHTML = '<div class="fav-picker-empty">В инвентаре нет растений для избранного 🌱</div>';
+  } else {
+    grid.innerHTML = '';
+    keys.forEach(key => {
+      const pk = fruitKey(key);
+      const plant = PLANTS[pk]; if (!plant) return;
+      const seed = isSeedKey(key);
+      const mutated = isMutKey(key);
+      const isPrismatic = plant.rarity === 'prismatic';
+      const mv = mutated ? MUTATION_VISUALS[mutMeta(key).weatherType] : null;
+      const el = document.createElement('div');
+      el.className = 'inv-slot' + (isPrismatic ? ' prismatic-item' : '') + (mutated && mv ? ` mut-tint ${mv.css}` : '');
+      const nameHtml = isPrismatic
+        ? `<span class="inv-name shimmer-text">${plant.name}${seed?' 🌱':''}</span>`
+        : `<span class="inv-name">${plant.name}${seed?' 🌱':''}</span>`;
+      const badge = mutated && mv ? `<span class="mutation-badge">${WEATHER_TYPES[mutMeta(key).weatherType].emoji}</span>` : '';
+      el.innerHTML = `${badge}<span class="inv-emoji">${plant.emoji}</span><span class="inv-count">×${state.inventory[key]}</span>${nameHtml}`;
+      el.addEventListener('click', () => { favoriteItem(key); closeOverlay('fav-picker-overlay'); });
+      grid.appendChild(el);
+    });
+  }
+  openOverlay('fav-picker-overlay');
+}
+
+// ═══════════════════════════════════════════════════════════
+//  FRAGMENTS / XP
+// ═══════════════════════════════════════════════════════════
+function grantHarvestFragments() {
+  if (Math.random() >= 0.30) return 0;
+  const amt = 5 + Math.floor(Math.random()*6);
+  state.fragments += amt;
+  while (state.fragments >= 100) { state.fragments -= 100; state.xpCrates++; }
+  return amt;
+}
+
+// ═══════════════════════════════════════════════════════════
+//  SHOP GENERATION
+// ═══════════════════════════════════════════════════════════
+function generateShopSeeds() {
+  const pool = [];
+  Object.keys(PLANTS).forEach(k => {
+    const r = PLANTS[k].rarity;
+    if (r === 'prismatic') return; // never in normal rotation
+    const w = {common:8,rare:4,epic:2,legendary:1}[r];
+    for (let i=0;i<w;i++) pool.push(k);
+  });
+  const picked = [], used = new Set(); let att = 0;
+  while (picked.length < 6 && att++ < 400) {
+    const k = pool[Math.floor(Math.random()*pool.length)];
+    if (!used.has(k)) {
+      used.add(k);
+      picked.push({ plantKey:k, qty: Math.max(1,Math.floor(Math.random()*RARITY_MAX_QTY[PLANTS[k].rarity])+1) });
+    }
+  }
+  return picked;
+}
+function maybeRefreshShop() {
+  const now = Date.now();
+  if (now - state.shopState.lastRefresh >= SHOP_REFRESH_MS || !state.shopState.seeds.length) {
+    state.shopState.seeds       = generateShopSeeds();
+    state.shopState.toolWater   = 10 + Math.floor(Math.random()*41);
+    state.shopState.toolShovel  = 10 + Math.floor(Math.random()*41);
+    state.shopState.lastRefresh = now;
+    shopJustRefreshed = true;
+    saveState();
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+//  FORMAT HELPERS
+// ═══════════════════════════════════════════════════════════
+function fmtSecs(s) {
+  s = Math.ceil(s);
+  if (s >= 3600) return Math.floor(s/3600)+'ч '+Math.floor((s%3600)/60)+'м';
+  if (s >= 60)   return Math.floor(s/60)+'м'+(s%60?' '+s%60+'с':'');
+  return s+'с';
+}
+function fmtMs(ms) { return fmtSecs(Math.max(0, Math.ceil(ms/1000))); }
+function growthEmoji(plantKey, prog) {
+  if (prog < 0.33) return '🌱';
+  if (prog < 0.75) return '🌿';
+  return PLANTS[plantKey].emoji;
+}
+function randInt(a,b) { return a + Math.floor(Math.random()*(b-a+1)); }
+
+// ═══════════════════════════════════════════════════════════
+//  CRATE ROLLING
+// ═══════════════════════════════════════════════════════════
+function rollRarityFromOdds(odds) {
+  const total = Object.values(odds).reduce((a,b)=>a+b,0);
+  let r = Math.random()*total, acc = 0;
+  for (const k in odds) { acc += odds[k]; if (r < acc) return k; }
+  return Object.keys(odds)[0];
+}
+
+// ═══════════════════════════════════════════════════════════
+//  GARDEN — cached DOM, rAF-optimised
+// ═══════════════════════════════════════════════════════════
+const plotEls = [], plotDirty = [], plotAnimRefs = [];
+function buildGardenDOM() {
+  const grid = document.getElementById('garden-grid');
+  const stage = curStage();
+  grid.style.gridTemplateColumns = `repeat(${stage.cols},1fr)`;
+  grid.innerHTML = ''; plotEls.length = 0; plotDirty.length = 0; plotAnimRefs.length = 0;
+  const plots = curPlots();
+  for (let i=0; i<plots.length; i++) {
+    const el = document.createElement('div');
+    el.className = 'plot';
+    el.addEventListener('click', () => onPlotClick(i));
+    grid.appendChild(el); plotEls.push(el); plotDirty.push(true); plotAnimRefs.push({bar:null,timer:null});
+  }
+}
+function markDirty(i)   { if(i<plotDirty.length) plotDirty[i]=true; }
+function markAllDirty() { for(let i=0;i<plotDirty.length;i++) plotDirty[i]=true; }
+
+function rebuildPlot(i) {
+  const el = plotEls[i], plot = curPlots()[i], now = Date.now();
+  el.className = 'plot'; plotAnimRefs[i].bar=null; plotAnimRefs[i].timer=null;
+  if (!plot) {
+    el.classList.add('empty'); el.innerHTML = '<span class="plot-dirt">🟫</span>';
+  } else {
+    const plant = PLANTS[plot.plantKey];
+    const isPrismatic = plant.rarity === 'prismatic';
+    const elapsed = (now - plot.plantedAt)/1000;
+    const prog    = Math.min(elapsed / plot.growTime, 1);
+    if (isPrismatic) el.classList.add('prismatic-plot');
+    const mv = (plot.mutated && plot.mutationType) ? MUTATION_VISUALS[plot.mutationType] : null;
+    if (mv) el.classList.add('mut-tint', mv.css);
+    const wtInfo = mv ? WEATHER_TYPES[plot.mutationType] : null;
+    const mutBadge = mv ? `<span class="mutation-badge" title="Мутация «${mv.label}» +${wtInfo.bonus}%">${wtInfo.emoji}</span>` : '';
+    if (prog >= 1) {
+      el.classList.add('ready');
+      const nameHtml = isPrismatic ? `<span class="plot-name shimmer-text">${plant.name}</span>` : `<span class="plot-name">${plant.name}</span>`;
+      el.innerHTML = `${mutBadge}<span class="plot-emoji">${plant.emoji}</span>${nameHtml}<span class="plot-ready-badge">✅ Готово!</span>`;
+    } else {
+      el.classList.add('planted');
+      const rem = Math.max(0, plot.growTime - elapsed);
+      const nameHtml = isPrismatic ? `<span class="plot-name shimmer-text">${plant.name}</span>` : `<span class="plot-name">${plant.name}</span>`;
+      el.innerHTML = `
+        ${mutBadge}
+        ${(plot.boostCount)?`<span class="plot-boost-icon">💧${plot.boostCount>1?'×'+plot.boostCount:''}</span>`:''}
+        <span class="plot-timer">${fmtSecs(rem)}</span>
+        <span class="plot-emoji">${growthEmoji(plot.plantKey, prog)}</span>
+        ${nameHtml}
+        <div class="plot-prog-wrap"><div class="plot-prog-bar" style="width:${(prog*100).toFixed(2)}%"></div></div>
+      `;
+      plotAnimRefs[i].bar   = el.querySelector('.plot-prog-bar');
+      plotAnimRefs[i].timer = el.querySelector('.plot-timer');
+    }
+  }
+  if (activeTool && plot) el.classList.add('tool-target');
+  plotDirty[i] = false;
+}
+function tickGarden() {
+  const now = Date.now();
+  const plots = curPlots();
+  for (let i=0; i<plotEls.length; i++) {
+    if (plotDirty[i]) { rebuildPlot(i); continue; }
+    const plot = plots[i]; if (!plot) continue;
+    const elapsed = (now - plot.plantedAt)/1000;
+    const prog    = Math.min(elapsed / plot.growTime, 1);
+    if (prog >= 1) { markDirty(i); continue; }
+    const r = plotAnimRefs[i];
+    if (r.bar)   r.bar.style.width   = (prog*100).toFixed(2)+'%';
+    if (r.timer) r.timer.textContent  = fmtSecs(Math.max(0, plot.growTime - elapsed));
+    const ne = growthEmoji(plot.plantKey, prog);
+    const eEl = plotEls[i].querySelector('.plot-emoji');
+    if (eEl && eEl.textContent !== ne) eEl.textContent = ne;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+//  v0.5 — MUTATION TICK (runs every game loop tick)
+// ═══════════════════════════════════════════════════════════
+let currentWeather = { type:'clear', active:false, timeLeftMs:0, windowId:0 };
+function tickWeatherAndMutations() {
+  currentWeather = getWeatherState();
+  renderWeatherUI();
+  maybeSpawnPrismGift();
+  if (!currentWeather.active || currentWeather.type === 'clear') return;
+  const wt = WEATHER_TYPES[currentWeather.type];
+  const isPrism = currentWeather.type === 'prism';
+  const chance = isPrism ? 1 : MUTATION_CHANCE; // 🔘 Призма: мутация гарантирована на 100%
+  let anyChanged = false;
+  state.fields.forEach((field, fIdx) => {
+    field.plots.forEach((plot, i) => {
+      if (!plot) return;
+      // Every plant on every field can mutate — growing OR already ready to harvest.
+      if (plot.mutRolledWindow === currentWeather.windowId) return;
+      plot.mutRolledWindow = currentWeather.windowId;
+      anyChanged = true;
+      if (Math.random() < chance) {
+        plot.mutated = true;
+        plot.mutationType = currentWeather.type;
+        playSound('mutation');
+        showToast(`✨ Растение получило мутацию «${wt.name}»! +${wt.bonus}% к цене продажи`);
+        if (fIdx === state.activeField && plotEls[i]) {
+          plotEls[i].classList.add('mut-flash');
+          setTimeout(()=>plotEls[i] && plotEls[i].classList.remove('mut-flash'), 700);
+        }
+        if (fIdx === state.activeField) markDirty(i);
+      }
+    });
+  });
+  if (anyChanged) saveState();
+}
+// ═══════════════════════════════════════════════════════════
+//  🔘 ПРИЗМА — уникальная фишка этой погоды: пока она активна, с неба изредка
+//  падают тапаемые "дары Призмы" (ключи / монеты / фрагменты), которые пропадают
+//  через несколько секунд, если их не забрать вовремя.
+// ═══════════════════════════════════════════════════════════
+let prismGiftEl = null, lastPrismGiftCheck = 0;
+function maybeSpawnPrismGift() {
+  if (!(currentWeather.active && currentWeather.type === 'prism')) {
+    if (prismGiftEl) { prismGiftEl.remove(); prismGiftEl = null; }
+    return;
+  }
+  if (prismGiftEl) return; // один дар за раз
+  const now = Date.now();
+  if (now - lastPrismGiftCheck < 15000) return;
+  lastPrismGiftCheck = now;
+  if (Math.random() > 0.5) return; // ~50% шанс раз в 15 секунд
+  spawnPrismGift();
+}
+function spawnPrismGift() {
+  const el = document.createElement('div');
+  el.className = 'prism-gift';
+  el.textContent = '💠';
+  el.style.left = (12 + Math.random()*66) + 'vw';
+  el.style.top  = (22 + Math.random()*42) + 'vh';
+  el.onclick = () => {
+    if (prismGiftEl !== el) return;
+    el.remove(); prismGiftEl = null;
+    const roll = Math.random();
+    if (roll < 0.3) {
+      state.keys += 1;
+      showToast('💠 Дар Призмы: +1 🔑 ключ!');
+    } else if (roll < 0.8) {
+      const c = randInt(50,150); addCoins(c); showFloatingCoins(c);
+      showToast(`💠 Дар Призмы: +${c} 🪙!`);
+    } else {
+      const f = randInt(10,20);
+      state.fragments += f; while (state.fragments>=100){ state.fragments-=100; state.xpCrates++; }
+      showToast(`💠 Дар Призмы: +${f} 🎫!`);
+    }
+    saveState(); renderCoins(); playSound('mutation');
+  };
+  document.body.appendChild(el);
+  prismGiftEl = el;
+  setTimeout(() => { if (prismGiftEl === el) { el.remove(); prismGiftEl = null; } }, 12000);
+}
+function renderWeatherUI() {
+  const wt = WEATHER_TYPES[currentWeather.type];
+  const pillEmoji = document.getElementById('weather-pill-emoji');
+  const pillTimer = document.getElementById('weather-pill-timer');
+  if (pillEmoji) pillEmoji.textContent = wt.emoji;
+  if (pillTimer) pillTimer.textContent = currentWeather.active
+    ? 'Осталось '+fmtMs(currentWeather.timeLeftMs)
+    : 'Через '+fmtMs(currentWeather.timeLeftMs);
+  const bgLayer = document.getElementById('weather-bg-layer');
+  const prismFrame = document.getElementById('prism-border-frame');
+  if (bgLayer) {
+    if (currentWeather.active && wt.bg) {
+      bgLayer.classList.add('active');
+      bgLayer.classList.toggle('rainbow-bg', wt.bg === 'rainbow');
+      bgLayer.classList.toggle('prism-bg', wt.bg === 'prism');
+      bgLayer.style.background = (wt.bg === 'rainbow' || wt.bg === 'prism') ? '' : wt.bg;
+    } else {
+      bgLayer.classList.remove('active','rainbow-bg','prism-bg');
+    }
+  }
+  if (prismFrame) prismFrame.classList.toggle('active', currentWeather.active && wt.bg === 'prism');
+  updateWeatherParticles();
+}
+let lastParticleSpawn = 0, lastParticleType = null;
+function updateWeatherParticles() {
+  const wrap = document.getElementById('weather-particles');
+  if (!wrap) return;
+  const wt = WEATHER_TYPES[currentWeather.type];
+  if (!currentWeather.active || !wt.particle) {
+    if (lastParticleType !== null) { wrap.innerHTML=''; lastParticleType = null; }
+    return;
+  }
+  lastParticleType = currentWeather.type;
+  const now = performance.now();
+  if (now - lastParticleSpawn < 260) return;
+  lastParticleSpawn = now;
+  if (wrap.childElementCount > 40) wrap.firstChild && wrap.removeChild(wrap.firstChild);
+  const p = document.createElement('span');
+  p.className = 'wparticle';
+  p.textContent = wt.particle;
+  const left = Math.random()*100;
+  const dur = 3.5 + Math.random()*2.5;
+  const drift = (Math.random()*60-30)+'px';
+  p.style.left = left+'vw';
+  p.style.fontSize = (10+Math.random()*10)+'px';
+  p.style.setProperty('--drift', drift);
+  p.style.setProperty('--rot', (Math.random()*360)+'deg');
+  p.style.animation = `fallDown ${dur}s linear forwards`;
+  wrap.appendChild(p);
+  setTimeout(()=>p.remove(), dur*1000+100);
+}
+
+// Adds a harvested plant to the inventory, tagging it as mutated (its own stack, boosted sell price)
+// when applicable. Returns { key, mutated, weatherType } for toast/UI purposes.
+function harvestToInventory(plot) {
+  const plantKey = plot.plantKey;
+  if (plot.mutated && plot.mutationType) {
+    const key = makeMutKey(plot.mutationType, plantKey);
+    state.inventory[key] = (state.inventory[key]||0) + 1;
+    return { key, mutated: true, weatherType: plot.mutationType };
+  }
+  state.inventory[plantKey] = (state.inventory[plantKey]||0) + 1;
+  return { key: plantKey, mutated: false };
+}
+
+// ═══════════════════════════════════════════════════════════
+//  FIELD SWITCHING
+// ═══════════════════════════════════════════════════════════
+function switchField(idx) {
+  if (idx === 1 && !state.fields[1].unlocked) {
+    showToast('🔒 Сначала открой второе поле в Магазине!');
+    return;
+  }
+  if (state.activeField === idx) return;
+  state.activeField = idx; activeTool = null;
+  saveState();
+  buildGardenDOM(); markAllDirty(); renderTools(); renderInventory(); updateFieldTabsUI();
+}
+function updateFieldTabsUI() {
+  const t0 = document.getElementById('field-tab-0'), t1 = document.getElementById('field-tab-1');
+  t0.classList.toggle('active', state.activeField===0);
+  t1.classList.toggle('active', state.activeField===1);
+  t1.classList.toggle('locked', !state.fields[1].unlocked);
+  t1.textContent = state.fields[1].unlocked ? 'Поле 2' : '🔒 Поле 2';
+}
+
+// ═══════════════════════════════════════════════════════════
+//  RENDER
+// ═══════════════════════════════════════════════════════════
+function renderCoins() {
+  document.getElementById('coins-val').textContent = state.coins;
+  document.getElementById('fragments-val').textContent = state.fragments;
+  const kv = document.getElementById('keys-val'); if (kv) kv.textContent = state.keys;
+  const scd = document.getElementById('shop-coins-disp'); if (scd) scd.textContent = '🪙 ' + state.coins;
+}
+function renderTools() {
+  const wc=invGet('tool_water'), sc=invGet('tool_shovel');
+  document.getElementById('water-count').textContent  = '×'+wc;
+  document.getElementById('shovel-count').textContent = '×'+sc;
+  const bw=document.getElementById('btn-water'), bs=document.getElementById('btn-shovel');
+  bw.disabled = wc<=0 && activeTool!=='water';
+  bs.disabled = sc<=0 && activeTool!=='shovel';
+  bw.classList.toggle('active', activeTool==='water');
+  bs.classList.toggle('active', activeTool==='shovel');
+}
+function renderAutoSellUI() {
+  const ind = document.getElementById('autosell-indicator');
+  if (ind) ind.classList.toggle('visible', state.hasAutoSeller && state.autoSeller);
+}
+function renderInventory() {
+  const grid = document.getElementById('inventory-grid');
+  const seeds = [], fruits = [];
+  Object.keys(state.inventory).forEach(key => {
+    if (key.startsWith('tool_') || !state.inventory[key]) return;
+    const pk = fruitKey(key);
+    const plant = PLANTS[pk]; if (!plant) return;
+    const obj = { key, pk, plant, count: state.inventory[key], mutated: isMutKey(key) };
+    if (isSeedKey(key)) seeds.push(obj); else fruits.push(obj);
+  });
+  const items = [...seeds, ...fruits];
+  const slots = Math.max(10, items.length + 2);
+  grid.innerHTML = '';
+  for (let i=0; i<slots; i++) {
+    const el = document.createElement('div');
+    el.className = 'inv-slot';
+    if (i < items.length) {
+      const { key, pk, plant, count, mutated } = items[i];
+      const seed = isSeedKey(key);
+      const isPrismatic = plant.rarity === 'prismatic';
+      if (isPrismatic) el.classList.add('prismatic-item');
+      let badge = '';
+      if (mutated) {
+        const mv = MUTATION_VISUALS[mutMeta(key).weatherType];
+        if (mv) { el.classList.add('mut-tint', mv.css); badge = `<span class="mutation-badge">${WEATHER_TYPES[mutMeta(key).weatherType].emoji}</span>`; }
+      }
+      const nameHtml = isPrismatic
+        ? `<span class="inv-name shimmer-text">${plant.name}${seed?' 🌱':''}</span>`
+        : `<span class="inv-name">${plant.name}${seed?' 🌱':''}</span>`;
+      el.innerHTML = `${badge}<span class="inv-emoji">${plant.emoji}</span><span class="inv-count">×${count}</span>${nameHtml}`;
+      if (seed && selectedSeedKey === pk) el.classList.add('seed-selected');
+      el.addEventListener('click', () => seed ? onSeedClick(pk) : onFruitClick(key));
+    } else { el.classList.add('empty'); }
+    grid.appendChild(el);
+  }
+}
+function renderFavorites() {
+  const grid = document.getElementById('favorites-grid');
+  if (!grid) return;
+  const items = Object.keys(state.favorites).filter(k => state.favorites[k] > 0);
+  grid.innerHTML = '';
+  items.forEach(key => {
+    const pk = fruitKey(key);
+    const plant = PLANTS[pk]; if (!plant) return;
+    const seed = isSeedKey(key);
+    const mutated = isMutKey(key);
+    const count = state.favorites[key];
+    const isPrismatic = plant.rarity === 'prismatic';
+    const el = document.createElement('div');
+    let mutClass = '', badge = '';
+    if (mutated) {
+      const mv = MUTATION_VISUALS[mutMeta(key).weatherType];
+      if (mv) { mutClass = ` mut-tint ${mv.css}`; badge = `<span class="mutation-badge">${WEATHER_TYPES[mutMeta(key).weatherType].emoji}</span>`; }
+    }
+    el.className = 'inv-slot' + (isPrismatic ? ' prismatic-item' : '') + mutClass;
+    const nameHtml = isPrismatic
+      ? `<span class="inv-name shimmer-text">${plant.name}${seed?' 🌱':''}</span>`
+      : `<span class="inv-name">${plant.name}${seed?' 🌱':''}</span>`;
+    el.innerHTML = `
+      ${badge}
+      <span class="fav-remove-badge" title="Вернуть в инвентарь">✕</span>
+      <span class="inv-emoji">${plant.emoji}</span><span class="inv-count">×${count}</span>${nameHtml}
+    `;
+    el.querySelector('.fav-remove-badge').addEventListener('click', (e) => { e.stopPropagation(); unfavoriteItem(key); });
+    grid.appendChild(el);
+  });
+  const addEl = document.createElement('div');
+  addEl.className = 'fav-add-slot';
+  addEl.textContent = '+';
+  addEl.title = 'Добавить растение';
+  addEl.addEventListener('click', openFavPicker);
+  grid.appendChild(addEl);
+  if (!items.length) {
+    const note = document.createElement('div');
+    note.className = 'fav-empty-note';
+    note.textContent = 'Пока нет избранных растений 🌱 Нажми «+», чтобы добавить!';
+    grid.appendChild(note);
+  }
+}
+
+function renderFieldUpgradeCard() {
+  const wrap = document.getElementById('shop-upgrade-wrap');
+  const f = curField(), stage = FIELD_STAGES[f.level], next = FIELD_STAGES[f.level+1];
+  let html = `
+    <div class="shop-upgrade-card">
+      <span class="upgrade-icon">🟫</span>
+      <div class="upgrade-info">
+        <div class="upgrade-title">Расширение поля ${state.activeField===0?'1':'2'}</div>
+        <div class="upgrade-level">Уровень ${f.level+1}/${FIELD_STAGES.length} — ${stage.plots} грядок (${stage.label})</div>
+        ${next
+          ? `<div class="upgrade-next">→ Уровень ${f.level+2}: ${next.plots} грядок за 🪙${next.price}</div>`
+          : `<div class="upgrade-next">✅ Максимальный уровень!</div>`}
+      </div>
+      ${next
+        ? `<button class="buy-btn brown-btn" id="btn-buy-upgrade" onclick="buyFieldUpgrade()" ${state.coins<next.price?'disabled':''}>Купить</button>`
+        : ``}
+    </div>
+  `;
+  if (state.activeField === 0 && f.level === FIELD_STAGES.length-1 && !state.fields[1].unlocked) {
+    html += `
+      <div class="field2-card">
+        <span class="upgrade-icon">🌊</span>
+        <div class="upgrade-info">
+          <div class="upgrade-title">Открыть второе поле</div>
+          <div class="upgrade-level">Новое поле 3×3, прокачивается отдельно</div>
+          <div class="upgrade-next">Цена: 🪙${SECOND_FIELD_PRICE}</div>
+        </div>
+        <button class="buy-btn cyan-btn" onclick="buyField2()" ${state.coins<SECOND_FIELD_PRICE?'disabled':''}>Купить</button>
+      </div>
+    `;
+  }
+  wrap.innerHTML = html;
+}
+
+function renderShop() {
+  maybeRefreshShop();
+  document.getElementById('shop-coins-disp').textContent = '🪙 '+state.coins;
+
+  updatePrismaticCrateCard();
+  updatePrismaticPassShopCard();
+  regenWheelSpins();
+  const wsub = document.getElementById('wheel-card-sub');
+  if (wsub) wsub.textContent = state.wheel.spins>0 ? `${state.wheel.spins} прокрута доступно сейчас` : '3 бесплатных прокрута / 2ч';
+
+  renderCompensationCard();
+  renderFieldUpgradeCard();
+
+  // Tools
+  const toolRow = document.getElementById('shop-tools-row');
+  toolRow.innerHTML = '';
+  TOOL_SHOP.forEach(t => {
+    const stock = state.shopState[t.stockKey], ok = state.coins >= t.price && stock > 0;
+    const card = document.createElement('div');
+    card.className = `shop-tool-card ${t.id==='wateringcan'?'water-card':'shovel-card'}`;
+    card.innerHTML = `
+      <span class="shop-tool-emoji">${t.emoji}</span>
+      <span class="shop-tool-name">${t.name}</span>
+      <span class="shop-tool-price">🪙 ${t.price}</span>
+      <span class="shop-tool-stock">В наличии: ${stock}</span>
+      <button class="buy-btn" onclick="buyTool('${t.id}')" ${ok?'':'disabled'}>Купить</button>
+    `;
+    toolRow.appendChild(card);
+  });
+
+  renderShopCrates();
+
+  // Seeds — show ALL slots even if sold out
+  const seedGrid = document.getElementById('shop-seeds-grid');
+  seedGrid.innerHTML = '';
+  const wasRefreshed = shopJustRefreshed;
+  shopJustRefreshed = false;
+
+  state.shopState.seeds.forEach((item, idx) => {
+    const p   = PLANTS[item.plantKey];
+    const row = document.createElement('div');
+    if (item.qty <= 0) {
+      row.className = 'shop-seed-row sold-out';
+      row.innerHTML = `
+        <span class="shop-seed-emoji">${p.emoji}</span>
+        <div class="shop-seed-info">
+          <span class="shop-seed-name">${p.name}</span>
+          <span style="font-size:10px;color:rgba(255,255,255,0.38);">Нет в наличии</span>
+        </div>
+        <div style="font-size:12px;color:rgba(255,255,255,0.25);">—</div>
+      `;
+    } else {
+      const ok = state.coins >= p.seedPrice;
+      row.className = `shop-seed-row rarity-${p.rarity}`;
+      row.innerHTML = `
+        <span class="shop-seed-emoji">${p.emoji}</span>
+        <div class="shop-seed-info">
+          <span class="shop-seed-name">${p.name}</span>
+          <span class="rarity-badge">${RARITY_LABELS[p.rarity]}</span>
+          <span class="shop-seed-meta">⏱ ${fmtSecs(p.growTime)} · продажа 🪙${p.sellPrice}</span>
+        </div>
+        <div class="shop-seed-buy">
+          <span class="shop-seed-price">🪙 ${p.seedPrice}</span>
+          <span class="shop-seed-qty">×${item.qty}</span>
+          <button class="buy-btn" onclick="buySeed(${idx})" ${ok?'':'disabled'}>Купить</button>
+        </div>
+      `;
+    }
+    if (wasRefreshed) { row.classList.add('flip-anim'); row.style.animationDelay = (idx * 0.08) + 's'; }
+    seedGrid.appendChild(row);
+  });
+
+  updateShopTimer();
+}
+
+function renderShopCrates() {
+  const row = document.getElementById('shop-crates-row');
+  if (!row) return;
+  row.innerHTML = '';
+  const now = Date.now();
+
+  // Free crate
+  const freeLeft = Math.max(0, CRATE_TYPES.free.cooldownMs - (now - (state.shopState.freeCrateLastOpened||0)));
+  const freeOk = freeLeft <= 0;
+  row.innerHTML += `
+    <div class="crate-card crate-free ${freeOk?'':'disabled'}" ${freeOk?`onclick="openCratePopup('free')"`:''}>
+      <span class="crate-emoji">📦</span>
+      <span class="crate-name">Бесплатный</span>
+      <span class="crate-sub">${freeOk ? 'Открыть!' : '⏳ '+fmtMs(freeLeft)}</span>
+    </div>
+  `;
+  // Paid crate
+  const paidOk = state.coins >= CRATE_TYPES.paid.costAmount;
+  row.innerHTML += `
+    <div class="crate-card crate-paid ${paidOk?'':'disabled'}" ${paidOk?`onclick="openCratePopup('paid')"`:''}>
+      <span class="crate-emoji">🎁</span>
+      <span class="crate-name">Платный</span>
+      <span class="crate-sub">🪙 ${CRATE_TYPES.paid.costAmount}</span>
+    </div>
+  `;
+  // XP crate
+  const xpOk = state.xpCrates >= 1;
+  row.innerHTML += `
+    <div class="crate-card crate-xp ${xpOk?'':'disabled'}" ${xpOk?`onclick="openCratePopup('xp')"`:''}>
+      <span class="crate-emoji">🪅</span>
+      <span class="crate-name">XP-ящик</span>
+      <span class="crate-sub">У тебя: ${state.xpCrates}</span>
+    </div>
+  `;
+
+  const xpWrap = document.getElementById('xp-progress-display');
+  if (xpWrap) {
+    xpWrap.innerHTML = `
+      <div class="xp-progress-wrap">
+        <span style="font-size:18px;">🎫</span>
+        <div class="xp-progress-bar-bg"><div class="xp-progress-bar" style="width:${state.fragments}%"></div></div>
+        <span class="xp-progress-text">${state.fragments}/100 до 🪅</span>
+      </div>
+    `;
+  }
+}
+
+function renderCompensationCard() {
+  const wrap = document.getElementById('shop-compensation-wrap');
+  if (!wrap) return;
+  const now = Date.now();
+  if (state.compensation.claimed || (state.compensation.deadline && now > state.compensation.deadline)) {
+    wrap.innerHTML = '';
+    return;
+  }
+  const left = state.compensation.deadline - now;
+  wrap.innerHTML = `
+    <div id="shop-compensation-card">
+      <div class="comp-title">🎁 Подарок за обновление v0.4!</div>
+      <div class="comp-desc">5000 монет 🪙, 5 семян Лотоса 🌺 и 5 XP-ящиков 🪅 — наша благодарность за то, что играешь в Bloom!</div>
+      <div class="comp-timer">⏳ Осталось: ${fmtMs(Math.max(0,left))}</div>
+      <button class="buy-btn purple-btn" onclick="claimCompensation()">Забрать подарок!</button>
+    </div>
+  `;
+}
+function claimCompensation() {
+  if (state.compensation.claimed) return;
+  addCoins(5000);
+  state.inventory['seed_lotus'] = (state.inventory['seed_lotus']||0) + 5;
+  state.xpCrates += 5;
+  state.compensation.claimed = true;
+  saveState(); renderCoins(); renderInventory(); renderShop(); playSound('buy');
+  showFloatingCoins(5000);
+  showToast('🎁 Подарок получен! Спасибо, что играешь в Bloom 🌸');
+}
+
+function updateShopTimer() {
+  const left = Math.max(0, SHOP_REFRESH_MS - (Date.now() - state.shopState.lastRefresh));
+  document.getElementById('shop-refresh-info').textContent = '🔄 Семена обновятся через ' + fmtMs(left);
+}
+
+// ═══════════════════════════════════════════════════════════
+//  CRATE OPEN POPUP
+// ═══════════════════════════════════════════════════════════
+// Rolls a crate's contents and applies them to state (inventory + possible bonus key).
+// Does NOT touch cost/cooldown — caller is responsible for that.
+function rollCrateReward(typeKey) {
+  const ct = CRATE_TYPES[typeKey];
+  const rarity   = rollRarityFromOdds(ct.odds);
+  const keys     = Object.keys(PLANTS).filter(k => PLANTS[k].rarity === rarity);
+  const plantKey = keys[Math.floor(Math.random()*keys.length)];
+  const range    = QTY_RANGE[rarity] || [1,1];
+  const qty      = randInt(range[0], range[1]);
+  const sk = 'seed_'+plantKey;
+  state.inventory[sk] = (state.inventory[sk]||0)+qty;
+  questProgress('crate', 1);
+  let bonusKey = false;
+  if ((typeKey==='paid' || typeKey==='xp') && Math.random() < BONUS_KEY_DROP_CHANCE) { state.keys += 1; bonusKey = true; }
+  return { rarity, plantKey, qty, bonusKey };
+}
+// Displays the big reward-reveal card (image-1 style) for a rolled crate result.
+function showCrateRewardReveal(heading, result) {
+  const plant = PLANTS[result.plantKey];
+  document.getElementById('lb-popup-heading').textContent = heading;
+  document.getElementById('lb-box-stage').style.display    = 'none';
+  document.getElementById('lb-open-popup').className = 'reward-'+result.rarity;
+  const rs = document.getElementById('lb-reward-stage');
+  rs.style.display = 'block';
+  const re = document.getElementById('lb-reward-emoji');
+  re.textContent = plant.emoji; re.style.animation='none'; void re.offsetWidth; re.style.animation='rewardPop 0.55s cubic-bezier(0.34,1.56,0.64,1) both';
+  const nameEl = document.getElementById('lb-reward-name');
+  nameEl.textContent = plant.name;
+  nameEl.className = result.rarity === 'prismatic' ? 'shimmer-text' : '';
+  const rEl = document.getElementById('lb-reward-rarity');
+  rEl.textContent = RARITY_LABELS[result.rarity];
+  rEl.style.color = result.rarity === 'prismatic' ? '#fff' : RARITY_COLORS[result.rarity];
+  document.getElementById('lb-reward-qty').textContent = `×${result.qty} семян` + (result.bonusKey ? ' + 🔑 ключ!' : '');
+  document.getElementById('lb-close-btn').style.display = 'block';
+  document.getElementById('lb-open-overlay').classList.add('open');
+  saveState(); renderInventory(); renderCoins();
+  if (shopPanelOpen) renderShop();
+  playSound('harvest');
+  if (result.bonusKey) showToast('🔑 Бонус! Выпал Призматический ключ!');
+}
+// Used when a crate is granted "for free" (Pass reward, quest bonus) — rolls and reveals immediately,
+// skipping the tap-3-times step, exactly like the moment you'd see after tapping a bought crate.
+function grantAndRevealCrate(typeKey, heading) {
+  const ct = CRATE_TYPES[typeKey];
+  const result = rollCrateReward(typeKey);
+  crateTypeKeyOpen = typeKey; lbPopupTaps = 3;
+  showCrateRewardReveal(heading || `${ct.emoji} ${ct.name}`, result);
+}
+function openCratePopup(typeKey) {
+  const ct = CRATE_TYPES[typeKey], now = Date.now();
+  if (typeKey === 'free') {
+    const left = Math.max(0, ct.cooldownMs - (now - (state.shopState.freeCrateLastOpened||0)));
+    if (left > 0) { showToast('⏳ Перезарядка: ' + fmtMs(left)); return; }
+  } else if (typeKey === 'paid') {
+    if (state.coins < ct.costAmount) { showToast('Недостаточно монет!'); return; }
+  } else if (typeKey === 'xp') {
+    if (state.xpCrates < 1) { showToast('Нет XP-ящиков! Копи 🎫 фрагменты'); return; }
+  }
+  crateTypeKeyOpen = typeKey; lbPopupTaps = 0;
+  document.getElementById('lb-popup-heading').textContent = `${ct.emoji} ${ct.name}`;
+  document.getElementById('lb-box-stage').style.display   = '';
+  const popup = document.getElementById('lb-open-popup');
+  popup.className = '';
+  document.getElementById('lb-reward-stage').style.display = 'none';
+  document.getElementById('lb-close-btn').style.display    = 'none';
+  document.getElementById('lb-box-emoji').textContent = ct.emoji;
+  document.getElementById('lb-box-emoji').style.animation = '';
+  document.getElementById('lb-tap-dots').textContent  = '○○○';
+  document.getElementById('lb-tap-hint').textContent  = 'Тапни коробку 3 раза!';
+  document.getElementById('lb-open-overlay').classList.add('open');
+}
+function tapLootbox() {
+  if (lbPopupTaps >= 3) return;
+  lbPopupTaps++;
+  playSound('lootbox');
+  const emojiEl = document.getElementById('lb-box-emoji');
+  emojiEl.style.animation = 'none'; void emojiEl.offsetWidth; emojiEl.style.animation = 'lbTapShake 0.28s ease';
+  const dotsMap = ['○○○','●○○','●●○','●●●'];
+  document.getElementById('lb-tap-dots').textContent = dotsMap[lbPopupTaps];
+  if (lbPopupTaps === 1) { emojiEl.textContent='📦'; document.getElementById('lb-tap-hint').textContent='Ещё 2 раза!'; }
+  else if (lbPopupTaps === 2) { emojiEl.textContent='📦'; document.getElementById('lb-tap-hint').textContent='Последний удар!'; }
+  else {
+    emojiEl.textContent = '💥';
+    document.getElementById('lb-tap-hint').textContent = '';
+    setTimeout(() => {
+      const ct = CRATE_TYPES[crateTypeKeyOpen];
+      // pay cost now
+      if (crateTypeKeyOpen === 'free') state.shopState.freeCrateLastOpened = Date.now();
+      else if (crateTypeKeyOpen === 'paid') state.coins -= ct.costAmount;
+      else if (crateTypeKeyOpen === 'xp') state.xpCrates -= 1;
+      const result = rollCrateReward(crateTypeKeyOpen);
+      showCrateRewardReveal(`${ct.emoji} ${ct.name}`, result);
+    }, 500);
+  }
+}
+function closeLootboxPopup() {
+  document.getElementById('lb-open-overlay').classList.remove('open');
+  document.getElementById('lb-open-popup').className = '';
+  crateTypeKeyOpen = null;
+}
+
+// ═══════════════════════════════════════════════════════════
+//  AUTO-SELLER TICK
+// ═══════════════════════════════════════════════════════════
+let lastAutoTs = 0;
+function tickAutoSeller(ts) {
+  if (!state.hasAutoSeller || !state.autoSeller) return;
+  if (ts - lastAutoTs < 800) return;
+  lastAutoTs = ts;
+  let earned = 0, changed = false;
+  Object.keys(state.inventory).forEach(k => {
+    if (!k.startsWith('seed_') && !k.startsWith('tool_') && (PLANTS[k] || isMutKey(k)) && state.inventory[k] > 0) {
+      earned += state.inventory[k] * effectiveSellPrice(k);
+      delete state.inventory[k]; changed = true;
+    }
+  });
+  if (changed) {
+    addCoins(earned); saveState(); renderCoins(); renderInventory();
+    if (earned > 0) { showFloatingCoins(earned); playSound('sell'); }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+//  INTERACTIONS: INVENTORY
+// ═══════════════════════════════════════════════════════════
+function onSeedClick(pk) {
+  if (activeTool) { activeTool=null; renderTools(); markAllDirty(); }
+  selectedSeedKey = (selectedSeedKey===pk) ? null : pk;
+  if (selectedSeedKey) showToast(`🌱 ${PLANTS[pk].name} — тапни на грядку`);
+  renderInventory();
+}
+function onFruitClick(key) {
+  const pk = fruitKey(key), plant = PLANTS[pk];
+  if (!plant || invGet(key)<=0) return;
+  sellTarget = { key };
+  const count = invGet(key);
+  const price = effectiveSellPrice(key);
+  const mutated = isMutKey(key);
+  const mv = mutated ? MUTATION_VISUALS[mutMeta(key).weatherType] : null;
+  document.getElementById('sell-popup-emoji').textContent = plant.emoji;
+  document.getElementById('sell-popup-title').textContent = `Продать ${plant.name}?` + (mutated&&mv?` ✨ (${mv.label})`:'');
+  document.getElementById('sell-popup-price').textContent = `🪙 ${price} монет × 1`;
+  document.getElementById('sell-yes-btn').textContent     = `Да! ×1`;
+  document.getElementById('sell-all-btn').textContent     = `Продать все ×${count} за 🪙${price*count}`;
+  document.getElementById('sell-overlay').classList.add('open');
+}
+function confirmSell() {
+  if (!sellTarget) return;
+  const { key } = sellTarget, plant = PLANTS[fruitKey(key)];
+  if (invGet(key)<=0) { closeSellPopup(); return; }
+  const price = effectiveSellPrice(key);
+  invRemove(key, 1); addCoins(price); questProgress('sellcoins', price);
+  saveState(); renderCoins(); closeSellPopup(); showFloatingCoins(price); playSound('sell');
+  showToast(`💰 Продано за ${price} монет!`);
+}
+function confirmSellAll() {
+  if (!sellTarget) return;
+  const { key } = sellTarget, plant = PLANTS[fruitKey(key)];
+  const count = invGet(key);
+  if (count<=0) { closeSellPopup(); return; }
+  const total = count * effectiveSellPrice(key);
+  delete state.inventory[key]; addCoins(total); questProgress('sellcoins', total);
+  saveState(); renderCoins(); renderInventory(); closeSellPopup(); playSound('sell');
+  showFloatingCoins(total); showToast(`💰 Продано ×${count} за ${total} монет!`);
+}
+function closeSellPopup() { document.getElementById('sell-overlay').classList.remove('open'); sellTarget=null; }
+
+// ═══════════════════════════════════════════════════════════
+//  COLLECT ALL
+// ═══════════════════════════════════════════════════════════
+function collectAll() {
+  const now = Date.now();
+  const plots = curPlots();
+  let count = 0, fragGained = 0, mutCount = 0;
+  for (let i = 0; i < plots.length; i++) {
+    const plot = plots[i];
+    if (!plot) continue;
+    if ((now - plot.plantedAt) / 1000 < plot.growTime) continue;
+    const res = harvestToInventory(plot);
+    if (res.mutated) mutCount++;
+    fragGained += grantHarvestFragments();
+    plots[i] = null;
+    markDirty(i);
+    count++;
+  }
+  if (count === 0) { showToast('Нет готовых культур!'); return; }
+  questProgress('harvest', count); questProgress('fragments', fragGained);
+  saveState(); renderInventory(); renderCoins(); playSound('harvest');
+  showFloatingCoins(0, '🧺');
+  showToast(`🧺 Собрано: ${count} культур${count>4?'':'ы'}!${fragGained?` +🎫${fragGained}`:''}${mutCount?` ✨×${mutCount} с мутацией`:''}`);
+}
+
+// ═══════════════════════════════════════════════════════════
+//  INTERACTIONS: GARDEN
+// ═══════════════════════════════════════════════════════════
+function onPlotClick(idx) {
+  const plots = curPlots();
+  const plot = plots[idx];
+  if (activeTool==='shovel') {
+    if (!plot) { showToast('Грядка пуста!'); return; }
+    plots[idx]=null; invRemove('tool_shovel',1);
+    const leftShovel = invGet('tool_shovel');
+    questProgress('tool', 1);
+    if (leftShovel <= 0) { activeTool=null; showToast('🪏 Удалено — лопаты кончились!'); }
+    else { showToast(`🪏 Удалено (×${leftShovel} лопат осталось)`); }
+    saveState(); markDirty(idx); markAllDirty(); renderTools(); return;
+  }
+  if (activeTool==='water') {
+    if (!plot) { showToast('Нет растения!'); return; }
+    const rem = Math.max(0, plot.growTime - (Date.now()-plot.plantedAt)/1000);
+    if (rem <= 0) { showToast('Растение уже готово!'); return; }
+    plots[idx].plantedAt -= rem*0.25*1000;
+    plots[idx].boostCount = (plots[idx].boostCount||0)+1;
+    invRemove('tool_water',1);
+    const leftWater = invGet('tool_water');
+    questProgress('tool', 1);
+    if (leftWater <= 0) { activeTool=null; showToast('💧 Полито +25%! — лейки кончились'); }
+    else { showToast(`💧 Полито +25%! (×${leftWater} лейки осталось)`); }
+    saveState(); markDirty(idx); markAllDirty(); renderTools(); return;
+  }
+  if (plot) {
+    if ((Date.now()-plot.plantedAt)/1000 >= plot.growTime) {
+      const plant = PLANTS[plot.plantKey];
+      const res = harvestToInventory(plot);
+      const frag = grantHarvestFragments();
+      questProgress('harvest', 1); questProgress('fragments', frag);
+      plots[idx]=null; saveState(); renderInventory(); renderCoins(); markDirty(idx);
+      const fl=document.createElement('div'); fl.className='harvest-flash'; plotEls[idx].appendChild(fl); setTimeout(()=>fl.remove(),400);
+      playSound('harvest');
+      if (res.mutated) {
+        const mv = MUTATION_VISUALS[res.weatherType], bonus = WEATHER_TYPES[res.weatherType].bonus;
+        showToast(`✨🎉 Урожай с мутацией «${mv.label}»: ${plant.emoji} ${plant.name} (+${bonus}% к цене)${frag?` +🎫${frag}`:''}`);
+      } else {
+        showToast(`🎉 Урожай: ${plant.emoji} ${plant.name}${frag?` +🎫${frag}`:''}`);
+      }
+    } else { showToast('Ещё не выросло!'); }
+    return;
+  }
+  if (selectedSeedKey) {
+    const sk = 'seed_'+selectedSeedKey;
+    if (invGet(sk)<=0) { showToast('Семена кончились!'); selectedSeedKey=null; renderInventory(); return; }
+    invRemove(sk,1);
+    plots[idx] = { plantKey:selectedSeedKey, plantedAt:Date.now(), growTime:PLANTS[selectedSeedKey].growTime, boostCount:0 };
+    questProgress('plant', 1);
+    const pName = PLANTS[selectedSeedKey].name;
+    const leftOver = invGet(sk);
+    if (leftOver <= 0) { selectedSeedKey = null; showToast(`🌱 Посажено: ${pName} — семена закончились!`); }
+    else { showToast(`🌱 Посажено: ${pName} (×${leftOver} осталось)`); }
+    saveState(); markDirty(idx); renderInventory(); playSound('plant');
+  } else { showToast('Выбери семя из инвентаря!'); }
+}
+
+// ═══════════════════════════════════════════════════════════
+//  TOOL ACTIVATION
+// ═══════════════════════════════════════════════════════════
+function activateTool(t) {
+  if (activeTool===t) { activeTool=null; renderTools(); markAllDirty(); return; }
+  const ik = t==='water'?'tool_water':'tool_shovel';
+  if (invGet(ik)<=0) { showToast('Нет инструмента! Купи в Магазине'); return; }
+  activeTool=t; selectedSeedKey=null; renderInventory(); renderTools(); markAllDirty();
+  showToast(t==='water'?'💧 Тапни грядку (ещё раз — отмена)':'🪏 Тапни грядку (ещё раз — отмена)');
+}
+
+// ═══════════════════════════════════════════════════════════
+//  AUTO-SELL TOGGLE
+// ═══════════════════════════════════════════════════════════
+function toggleAutoSell() {
+  if (!state.hasAutoSeller) return;
+  state.autoSeller = !state.autoSeller;
+  saveState(); renderAutoSellUI();
+  showToast(state.autoSeller ? '📼 Сборщик включён' : '📼 Сборщик выключен');
+}
+
+// ═══════════════════════════════════════════════════════════
+//  SHOP PURCHASES
+// ═══════════════════════════════════════════════════════════
+function buyFieldUpgrade() {
+  const f = curField();
+  const next = FIELD_STAGES[f.level+1];
+  if (!next) { showToast('Уже максимум!'); return; }
+  if (state.coins < next.price) { showToast('Недостаточно монет!'); return; }
+  state.coins -= next.price; f.level++; normalizeField(state.activeField);
+  saveState(); renderCoins(); buildGardenDOM(); markAllDirty(); renderShop(); playSound('buy');
+  showToast(`🌾 Поле расширено до ${next.label}!`);
+}
+function buyField2() {
+  if (state.fields[1].unlocked) { showToast('Уже открыто!'); return; }
+  if (state.fields[0].level < FIELD_STAGES.length-1) { showToast('Сначала прокачай первое поле до максимума!'); return; }
+  if (state.coins < SECOND_FIELD_PRICE) { showToast('Недостаточно монет!'); return; }
+  state.coins -= SECOND_FIELD_PRICE; state.fields[1].unlocked = true; normalizeField(1);
+  saveState(); renderCoins(); renderShop(); updateFieldTabsUI(); playSound('buy');
+  showToast('🌊 Второе поле открыто! Переключайся вкладкой над грядками.');
+}
+function buyAutoSell() {
+  if (state.hasAutoSeller) return;
+  if (state.coins < 250) { showToast('Недостаточно монет!'); return; }
+  state.coins -= 250; state.hasAutoSeller = true;
+  saveState(); renderCoins(); renderAutoSellUI(); playSound('buy');
+  showToast('📼 Сборщик Урожая куплен!');
+}
+function buyTool(id) {
+  const t = TOOL_SHOP.find(x=>x.id===id);
+  if (!t) return;
+  if (state.coins < t.price)          { showToast('Недостаточно монет!'); return; }
+  if (state.shopState[t.stockKey]<=0) { showToast('Нет в наличии!');     return; }
+  state.coins -= t.price; state.shopState[t.stockKey]--;
+  state.inventory[t.invKey] = (state.inventory[t.invKey]||0)+1;
+  saveState(); renderCoins(); renderTools(); renderShop(); playSound('buy');
+  showToast(`✅ Куплено: ${t.name}`);
+}
+function buySeed(idx) {
+  const item = state.shopState.seeds[idx]; if (!item||item.qty<=0) return;
+  const p = PLANTS[item.plantKey];
+  if (state.coins < p.seedPrice) { showToast('Недостаточно монет!'); return; }
+  state.coins -= p.seedPrice; state.shopState.seeds[idx].qty--;
+  const sk = 'seed_'+item.plantKey; state.inventory[sk]=(state.inventory[sk]||0)+1;
+  saveState(); renderCoins(); renderInventory(); renderShop(); playSound('buy');
+  showToast(`🌱 Куплено: ${p.emoji} ${p.name}`);
+}
+
+// ═══════════════════════════════════════════════════════════
+//  v0.5 — QUESTS UI
+// ═══════════════════════════════════════════════════════════
+function openQuests() {
+  maybeRefreshQuests();
+  ensureQuestRerollDay();
+  renderQuests();
+  document.getElementById('quests-overlay').classList.add('open');
+}
+function closeQuests() { document.getElementById('quests-overlay').classList.remove('open'); }
+function renderQuests() {
+  const list = document.getElementById('quests-list');
+  list.innerHTML = '';
+  state.quests.list.forEach((q, idx) => {
+    const done = q.progress >= q.target;
+    const card = document.createElement('div');
+    card.className = 'quest-card' + (q.claimed ? ' quest-done' : '') + (q.isBonusSlot ? ' quest-bonus-slot' : '');
+    card.innerHTML = `
+      <div class="quest-top-row">
+        <span class="quest-icon">${q.icon}</span>
+        <span class="quest-desc">${q.desc}${q.isBonusSlot?' <span style="opacity:0.6;font-size:10px;">(доп.)</span>':''}</span>
+        <span class="quest-reward">+${q.reward} 🧩</span>
+      </div>
+      <div class="quest-progress-wrap"><div class="quest-progress-bar" style="width:${Math.min(100,(q.progress/q.target*100))}%"></div></div>
+      <div class="quest-bottom-row">
+        <span class="quest-progress-text">${Math.min(q.progress,q.target)}/${q.target}</span>
+        <button class="quest-claim-btn" ${(!done||q.claimed)?'disabled':''} onclick="claimQuest(${idx})">${q.claimed?'Получено ✓':'Забрать'}</button>
+      </div>
+    `;
+    list.appendChild(card);
+  });
+  const left = Math.max(0, QUEST_REFRESH_MS - (Date.now()-state.quests.lastRefresh));
+  document.getElementById('quests-refresh-timer').textContent = 'Обновление через ' + fmtMs(left);
+
+  const bonusWrap = document.getElementById('quests-bonus-wrap');
+  if (questsAllBaseDone() && !state.quests.bonusClaimed) {
+    bonusWrap.innerHTML = `
+      <div id="quests-bonus-card">
+        <span style="font-size:26px;">🎁</span>
+        <div class="qb-text">Все 5 заданий выполнены! Забери бонус: 🔑${QUEST_ALL_DONE_BONUS.keys} + 🪙${QUEST_ALL_DONE_BONUS.coins} + 🎁×${QUEST_ALL_DONE_BONUS.paidCrates}</div>
+        <button class="qb-claim-btn" onclick="claimQuestsBonus()">Забрать!</button>
+      </div>`;
+  } else {
+    bonusWrap.innerHTML = '';
+  }
+
+  const rerollBtn = document.getElementById('quests-reroll-btn');
+  const rerollSub = document.getElementById('quests-reroll-sub');
+  const usesLeft = QUEST_REROLL_MAX_PER_DAY - state.quests.rerollsUsedToday;
+  const cd = QUEST_REROLL_COOLDOWN_MS - (Date.now()-(state.quests.lastRerollAt||0));
+  const onCooldown = state.quests.lastRerollAt && cd > 0;
+  rerollBtn.disabled = usesLeft <= 0 || onCooldown;
+  rerollSub.textContent = usesLeft <= 0 ? 'на завтра' : (onCooldown ? fmtMs(cd) : usesLeft+'/'+QUEST_REROLL_MAX_PER_DAY);
+
+  updateQuestsFabBadge();
+}
+
+// ═══════════════════════════════════════════════════════════
+//  v0.5 — PASS UI
+// ═══════════════════════════════════════════════════════════
+let passPanelOpen = false;
+function openPass() {
+  passPanelOpen = true;
+  renderPass();
+  document.getElementById('pass-panel').classList.add('open');
+  document.getElementById('pass-fab').style.display = 'none';
+}
+function closePass() {
+  passPanelOpen = false;
+  document.getElementById('pass-panel').classList.remove('open');
+  document.getElementById('pass-fab').style.display = '';
+}
+function renderPass() {
+  const lvl = passLevel();
+  document.getElementById('pass-level-badge').textContent = `Ур. ${lvl}/${PASS_MAX_LEVEL}`;
+  const intoLevel = lvl>=PASS_MAX_LEVEL ? PASS_XP_PER_LEVEL : passXpIntoLevel();
+  document.getElementById('pass-xp-bar').style.width = (intoLevel/PASS_XP_PER_LEVEL*100)+'%';
+  document.getElementById('pass-xp-text').textContent = lvl>=PASS_MAX_LEVEL ? 'MAX' : `${intoLevel}/${PASS_XP_PER_LEVEL}`;
+  document.getElementById('pass-upsell-card').style.display = state.pass.paidUnlocked ? 'none' : 'flex';
+  updateQuestsFabBadge();
+
+  const freeCol = document.getElementById('pass-free-col');
+  const paidCol = document.getElementById('pass-paid-col');
+  freeCol.innerHTML = ''; paidCol.innerHTML = '';
+  for (let level=1; level<=PASS_MAX_LEVEL; level++) {
+    freeCol.appendChild(buildPassSlot('free', level, lvl));
+    paidCol.appendChild(buildPassSlot('paid', level, lvl));
+  }
+}
+function buildPassSlot(track, level, curLvl) {
+  const arr = track==='free' ? PASS_FREE_REWARDS : PASS_PAID_REWARDS;
+  const claimedArr = track==='free' ? state.pass.freeClaimed : state.pass.paidClaimed;
+  const r = arr[level-1];
+  const claimed = claimedArr.includes(level);
+  const unlocked = level <= curLvl && (track==='free' || state.pass.paidUnlocked);
+  const isFinal = r.type==='final_free' || r.type==='final_paid';
+  const slot = document.createElement('div');
+  slot.className = 'pass-reward-slot ' + (claimed?'pr-done':(unlocked?'pr-ready':'pr-locked')) + (isFinal?' pr-final':'');
+  const btnLabel = claimed ? '✓' : (unlocked ? 'Забрать' : level);
+  const qty = r.qty || (r.type==='coins'||r.type==='fragments'||r.type==='tool'||r.type==='keys' ? r.amount : null);
+  slot.innerHTML = `
+    <span class="pr-level">${level}</span>
+    <span class="pr-emoji">${r.emoji}</span>
+    <span class="pr-name">${r.label}</span>
+    ${qty ? `<span class="pr-qty">×${qty}</span>` : ''}
+    <button class="pass-claim-mini ${claimed?'done-mini':''}" ${(!unlocked||claimed)?'disabled':''} onclick="claimPassLevel('${track}',${level})">${btnLabel}</button>
+  `;
+  return slot;
+}
+
+// ═══════════════════════════════════════════════════════════
+//  v0.5 — WHEEL OF FORTUNE UI
+// ═══════════════════════════════════════════════════════════
+let wheelSpinning = false;
+function openWheel() {
+  maybeRefreshWheelSlots();
+  regenWheelSpins();
+  buildWheelSVG();
+  renderWheelUI();
+  document.getElementById('wheel-overlay').classList.add('open');
+}
+function closeWheel() { if (wheelSpinning) return; document.getElementById('wheel-overlay').classList.remove('open'); }
+function slotVisual(slot) {
+  if (slot.type === 'prismatic') return { emoji:'💠', label:'Призматик' };
+  const p = PLANTS[slot.plantKey];
+  return { emoji:p.emoji, label:`×${slot.qty}` };
+}
+function buildWheelSVG() {
+  const svg = document.getElementById('wheel-svg');
+  const n = state.wheel.slots.length || 8;
+  const cx=120, cy=120, r=112;
+  const seg = 360/n;
+  let html = '';
+  const colors = ['#065f46','#047857','#0e7490','#0369a1','#5b21b6','#7c3aed','#9d174d','#be185d'];
+  state.wheel.slots.forEach((slot, i) => {
+    const a0 = (i*seg - 90) * Math.PI/180, a1 = ((i+1)*seg - 90) * Math.PI/180;
+    const x0 = cx + r*Math.cos(a0), y0 = cy + r*Math.sin(a0);
+    const x1 = cx + r*Math.cos(a1), y1 = cy + r*Math.sin(a1);
+    const large = seg>180?1:0;
+    const fill = slot.type==='prismatic' ? 'url(#prismGrad)' : colors[i%colors.length];
+    html += `<path d="M${cx},${cy} L${x0.toFixed(1)},${y0.toFixed(1)} A${r},${r} 0 ${large} 1 ${x1.toFixed(1)},${y1.toFixed(1)} Z" fill="${fill}" stroke="rgba(255,255,255,0.25)" stroke-width="1.5"/>`;
+    const mid = (a0+a1)/2;
+    const tx = cx + (r*0.68)*Math.cos(mid), ty = cy + (r*0.68)*Math.sin(mid);
+    const v = slotVisual(slot);
+    html += `<text x="${tx.toFixed(1)}" y="${ty.toFixed(1)}" font-size="20" text-anchor="middle" dominant-baseline="middle">${v.emoji}</text>`;
+  });
+  svg.innerHTML = `<defs><linearGradient id="prismGrad" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0%" stop-color="#f472b6"/><stop offset="33%" stop-color="#facc15"/><stop offset="66%" stop-color="#38bdf8"/><stop offset="100%" stop-color="#a78bfa"/>
+  </linearGradient></defs>` + html;
+  svg.style.transition = 'none';
+  svg.style.transform = 'rotate(0deg)';
+  void svg.offsetWidth;
+  svg.style.transition = '';
+}
+function renderWheelUI() {
+  regenWheelSpins();
+  for (let i=0;i<3;i++) document.getElementById('wheel-dot-'+i).classList.toggle('filled', i < state.wheel.spins);
+  document.getElementById('wheel-spin-btn').disabled = state.wheel.spins<=0 || wheelSpinning;
+  document.getElementById('wheel-paid-spin-btn').disabled = state.coins < WHEEL_PAID_SPIN_COST || wheelSpinning;
+  document.getElementById('wheel-paid-spin-btn').textContent = `🪙 ${WHEEL_PAID_SPIN_COST} — крутить за монеты`;
+  const nextIn = Math.max(0, WHEEL_REGEN_MS - (Date.now()-(state.wheel.lastRegenAt||Date.now())));
+  document.getElementById('wheel-timer-text').textContent = state.wheel.spins>=WHEEL_MAX_SPINS ? 'Прокруты пополнены!' : 'Следующий прокрут через ' + fmtMs(nextIn);
+  const lw = state.wheel.lastWin;
+  document.getElementById('wheel-last-win').innerHTML = lw ? `Последний выигрыш: ${lw.emoji} <b>${lw.name}</b>` : '';
+  const sub = document.getElementById('wheel-card-sub');
+  if (sub) sub.textContent = state.wheel.spins>0 ? `${state.wheel.spins} прокрута доступно` : 'Через '+fmtMs(nextIn);
+}
+function spinWheel(paid) {
+  if (wheelSpinning) return;
+  regenWheelSpins();
+  if (paid) {
+    if (state.coins < WHEEL_PAID_SPIN_COST) { showToast('Недостаточно монет!'); return; }
+  } else {
+    if (state.wheel.spins <= 0) { showToast('Нет бесплатных прокрутов — жди пополнения!'); return; }
+  }
+  wheelSpinning = true;
+  if (paid) state.coins -= WHEEL_PAID_SPIN_COST; else state.wheel.spins -= 1;
+  saveState(); renderCoins(); renderWheelUI();
+
+  const slots = state.wheel.slots, n = slots.length, seg = 360/n;
+  const rarity = rollRarityFromOdds(Object.fromEntries(slots.map((s,i)=>[i, s.chance])));
+  const winIdx = parseInt(rarity, 10);
+  const svg = document.getElementById('wheel-svg');
+  const currentRot = (parseFloat((svg.style.transform.match(/-?\d+(\.\d+)?/)||[0])[0]) || 0);
+  const targetSegCenter = winIdx*seg + seg/2;
+  const fullSpins = 5 + Math.floor(Math.random()*2);
+  const targetRot = currentRot - (currentRot % 360) + fullSpins*360 + (360 - targetSegCenter);
+  svg.style.transform = `rotate(${targetRot}deg)`;
+  playSound('lootbox');
+
+  setTimeout(() => {
+    const slot = slots[winIdx];
+    let name, emoji, qty;
+    if (slot.type === 'prismatic') {
+      const prismPool = Object.keys(PLANTS).filter(k=>PLANTS[k].rarity==='prismatic');
+      const pk = prismPool[Math.floor(Math.random()*prismPool.length)];
+      qty = 1; emoji = PLANTS[pk].emoji; name = PLANTS[pk].name;
+      state.inventory['seed_'+pk] = (state.inventory['seed_'+pk]||0)+qty;
+    } else {
+      qty = slot.qty; emoji = PLANTS[slot.plantKey].emoji; name = PLANTS[slot.plantKey].name;
+      state.inventory['seed_'+slot.plantKey] = (state.inventory['seed_'+slot.plantKey]||0)+qty;
+    }
+    state.wheel.lastWin = { emoji, name: `${name} ×${qty}` };
+    questProgress('spin', 1);
+    saveState(); renderInventory(); renderCoins();
+    wheelSpinning = false;
+    renderWheelUI();
+    playSound('harvest');
+    showToast(`🎡 Выигрыш: ${emoji} ${name} ×${qty}!`);
+  }, 4300);
+}
+
+// ═══════════════════════════════════════════════════════════
+//  v0.5 — PRISMATIC CRATE UI
+// ═══════════════════════════════════════════════════════════
+let prismaticTaps = 0;
+function updatePrismaticCrateCard() {
+  const sub = document.getElementById('prismatic-crate-sub');
+  const btn = document.getElementById('prismatic-crate-btn');
+  if (!sub || !btn) return;
+  sub.textContent = `Нужно ${PRISMATIC_CRATE_KEY_COST} 🔑 ключей — у тебя ${state.keys}`;
+  btn.disabled = state.keys < PRISMATIC_CRATE_KEY_COST;
+}
+function openPrismaticCratePopup() {
+  if (state.keys < PRISMATIC_CRATE_KEY_COST) { showToast(`🔑 Нужно ${PRISMATIC_CRATE_KEY_COST} ключей! У тебя: ${state.keys}`); return; }
+  prismaticTaps = 0;
+  document.getElementById('prismatic-box-stage').style.display = '';
+  document.getElementById('prismatic-reward-stage').style.display = 'none';
+  document.getElementById('prismatic-close-btn').style.display = 'none';
+  document.getElementById('prismatic-box-emoji').textContent = '💠';
+  document.getElementById('prismatic-tap-dots').textContent = '○○○';
+  document.getElementById('prismatic-tap-hint').textContent = 'Тапни коробку 3 раза!';
+  openOverlay('prismatic-open-overlay');
+}
+function closePrismaticCratePopup() {
+  closeOverlay('prismatic-open-overlay');
+  updatePrismaticCrateCard();
+}
+function tapPrismaticCrate() {
+  if (prismaticTaps >= 3) return;
+  prismaticTaps++;
+  playSound('lootbox');
+  const emojiEl = document.getElementById('prismatic-box-emoji');
+  emojiEl.classList.remove('lb-shaking-strong'); void emojiEl.offsetWidth; emojiEl.classList.add('lb-shaking-strong');
+  const dotsMap = ['○○○','●○○','●●○','●●●'];
+  document.getElementById('prismatic-tap-dots').textContent = dotsMap[prismaticTaps];
+  // particle burst on every tap for extra event "feel"
+  const stage = document.getElementById('prismatic-box-stage');
+  for (let i=0;i<6;i++) {
+    const p = document.createElement('span');
+    p.className = 'lb-burst-particle';
+    p.textContent = ['💠','✨','🌟'][i%3];
+    p.style.left = '50%'; p.style.top = '50%';
+    p.style.setProperty('--bx', (Math.random()*180-90)+'px');
+    p.style.setProperty('--by', (Math.random()*180-90)+'px');
+    stage.appendChild(p);
+    setTimeout(()=>p.remove(), 950);
+  }
+  if (prismaticTaps < 3) {
+    document.getElementById('prismatic-tap-hint').textContent = prismaticTaps===1 ? 'Ещё 2 раза!' : 'Последний удар!';
+    return;
+  }
+  document.getElementById('prismatic-tap-hint').textContent = '';
+  emojiEl.textContent = '💥';
+  setTimeout(() => {
+    state.keys -= PRISMATIC_CRATE_KEY_COST;
+    const rewards = rollPrismaticCrateRewards();
+    rewards.forEach(rw => { state.inventory['seed_'+rw.plantKey] = (state.inventory['seed_'+rw.plantKey]||0)+rw.qty; });
+    saveState(); renderInventory(); renderCoins();
+    document.getElementById('prismatic-box-stage').style.display = 'none';
+    const listEl = document.getElementById('prismatic-reward-list');
+    listEl.innerHTML = rewards.map(rw => {
+      const p = PLANTS[rw.plantKey];
+      const shimmer = p.rarity==='prismatic' ? ' shimmer-text' : '';
+      return `<div style="display:flex;align-items:center;gap:10px;background:rgba(255,255,255,0.08);border-radius:12px;padding:8px 12px;">
+        <span style="font-size:26px;">${p.emoji}</span>
+        <span style="flex:1;text-align:left;font-weight:800;font-size:13px;color:#fff;" class="${shimmer}">${p.name}</span>
+        <span style="font-weight:800;color:#fde047;">×${rw.qty}</span>
+      </div>`;
+    }).join('');
+    document.getElementById('prismatic-reward-stage').style.display = '';
+    document.getElementById('prismatic-close-btn').style.display = '';
+    playSound('harvest');
+    updatePrismaticCrateCard();
+    if (shopPanelOpen) renderShop();
+  }, 900);
+}
+
+// ═══════════════════════════════════════════════════════════
+//  PANELS — open / close
+// ═══════════════════════════════════════════════════════════
+function openShop() {
+  shopPanelOpen = true;
+  document.getElementById('shop-panel').classList.add('open');
+  document.getElementById('shop-arrow-btn').style.display = 'none';
+  renderShop();
+}
+function closeShop() {
+  shopPanelOpen = false;
+  document.getElementById('shop-panel').classList.remove('open');
+  document.getElementById('shop-arrow-btn').style.display = '';
+}
+
+// Swipe gesture (shop only) — disabled while the Pass panel or any modal/overlay sits on top,
+// otherwise a swipe made *inside* those screens was also toggling the shop underneath them.
+function isBlockingOverlayOpen() {
+  const ids = ['sell-overlay','lb-open-overlay','prismatic-open-overlay','prismatic-pass-info-overlay',
+               'profile-overlay','fav-picker-overlay','lb-list-overlay','wheel-overlay','quests-overlay',
+               'patch-overlay','lbinfo-overlay','weatherinfo-overlay'];
+  return ids.some(id => { const el = document.getElementById(id); return el && el.classList.contains('open'); });
+}
+let swipeX = 0, swipeY = 0;
+document.addEventListener('touchstart', e => { swipeX=e.touches[0].clientX; swipeY=e.touches[0].clientY; }, {passive:true});
+document.addEventListener('touchend',   e => {
+  if (passPanelOpen || isBlockingOverlayOpen()) return;
+  const dx = e.changedTouches[0].clientX - swipeX;
+  const dy = Math.abs(e.changedTouches[0].clientY - swipeY);
+  if (dy > 55) return;
+  if (!shopPanelOpen && dx < -60) openShop();
+  if (shopPanelOpen  && dx >  60) closeShop();
+}, {passive:true});
+
+// ═══════════════════════════════════════════════════════════
+//  GENERIC OVERLAYS
+// ═══════════════════════════════════════════════════════════
+function openOverlay(id)  { document.getElementById(id).classList.add('open'); }
+function closeOverlay(id) { document.getElementById(id).classList.remove('open'); }
+
+// ═══════════════════════════════════════════════════════════
+//  UI HELPERS
+// ═══════════════════════════════════════════════════════════
+let toastTmr;
+function showToast(msg) {
+  const el=document.getElementById('toast'); el.textContent=msg; el.classList.add('show');
+  clearTimeout(toastTmr); toastTmr=setTimeout(()=>el.classList.remove('show'),2400);
+}
+function showFloatingCoins(amount, emoji) {
+  const el=document.createElement('div'); el.className='coin-float';
+  el.textContent = emoji ? emoji : '+'+amount+' 🪙';
+  el.style.left=(25+Math.random()*50)+'%'; el.style.top='55%';
+  document.body.appendChild(el); setTimeout(()=>el.remove(),1400);
+}
+let lastClock='';
+function tickClock() {
+  const now=new Date(), s=String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0');
+  if(s!==lastClock){document.getElementById('clock-display').textContent=s; lastClock=s;}
+}
+
+// ═══════════════════════════════════════════════════════════
+//  rAF GAME LOOP
+// ═══════════════════════════════════════════════════════════
+let lastShopTs=0, lastCrateTs=0, lastSeasonTs=0, lastWeatherTs=0, lastQuestsTs=0, lastWheelTs=0;
+function gameLoop(ts) {
+  tickGarden(); tickClock(); tickAutoSeller(ts);
+  if (ts-lastWeatherTs > 1000) { tickWeatherAndMutations(); lastWeatherTs=ts; }
+  if (ts-lastSeasonTs > 5000) { checkSeasonReset(); lastSeasonTs=ts; if (document.getElementById('lb-list-overlay').classList.contains('open')) renderLeaderboard(); }
+  if (ts-lastQuestsTs > 3000) {
+    maybeRefreshQuests(); updateQuestsFabBadge();
+    if (document.getElementById('quests-overlay').classList.contains('open')) renderQuests();
+    lastQuestsTs = ts;
+  }
+  if (ts-lastWheelTs > 2000) {
+    if (document.getElementById('wheel-overlay').classList.contains('open') && !wheelSpinning) renderWheelUI();
+    lastWheelTs = ts;
+  }
+  if (shopPanelOpen) {
+    if (ts-lastShopTs > 1000) { updateShopTimer(); lastShopTs=ts; }
+    if (ts-lastCrateTs > 2000) { renderShopCrates(); renderCompensationCard(); updatePrismaticCrateCard(); lastCrateTs=ts; }
+  }
+  requestAnimationFrame(gameLoop);
+}
+
+// ═══════════════════════════════════════════════════════════
+//  PROFILE
+// ═══════════════════════════════════════════════════════════
+const PROFILE_KEY = 'bloom_profile';
+let profile = { nickname: '', avatarDataUrl: null };
+
+function loadProfile() {
+  try { const r = localStorage.getItem(PROFILE_KEY); if (r) profile = JSON.parse(r); } catch(e) {}
+  _applyProfileBtn();
+}
+function _applyProfileBtn() {
+  const img = document.getElementById('profile-btn-img');
+  const em  = document.getElementById('profile-btn-emoji');
+  if (profile.avatarDataUrl) { img.src = profile.avatarDataUrl; img.style.display='block'; em.style.display='none'; }
+  else { img.style.display='none'; em.style.display=''; }
+}
+function openProfile() {
+  document.getElementById('profile-nickname').value = profile.nickname || '';
+  const pImg = document.getElementById('profile-avatar-img');
+  const pEm  = document.getElementById('profile-avatar-emoji');
+  if (profile.avatarDataUrl) { pImg.src = profile.avatarDataUrl; pImg.style.display='block'; pEm.style.display='none'; }
+  else { pImg.style.display='none'; pEm.style.display=''; }
+  switchProfileTab('main');
+  _updateProfileStats();
+  document.getElementById('profile-overlay').classList.add('open');
+}
+function closeProfile() { document.getElementById('profile-overlay').classList.remove('open'); }
+function switchProfileTab(tab) {
+  document.getElementById('profile-tab-main').style.display = tab==='main' ? '' : 'none';
+  document.getElementById('profile-tab-fav').style.display  = tab==='fav'  ? '' : 'none';
+  document.getElementById('profile-tab-btn-main').classList.toggle('active', tab==='main');
+  document.getElementById('profile-tab-btn-fav').classList.toggle('active', tab==='fav');
+  if (tab==='fav') renderFavorites();
+}
+function _updateProfileStats() {
+  document.getElementById('profile-stat-coins').textContent = '🪙 ' + state.coins.toLocaleString('ru-RU');
+  document.getElementById('profile-stat-fragments').textContent = '🎫 ' + state.fragments;
+  const total = Object.keys(state.inventory).filter(k => PLANTS[k]).reduce((s,k) => s + (state.inventory[k]||0), 0);
+  document.getElementById('profile-stat-plants').textContent = total;
+}
+function handleAvatarChange(e) {
+  const file = e.target.files[0]; if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    profile.avatarDataUrl = ev.target.result;
+    const pImg = document.getElementById('profile-avatar-img');
+    const pEm  = document.getElementById('profile-avatar-emoji');
+    pImg.src = profile.avatarDataUrl; pImg.style.display='block'; pEm.style.display='none';
+  };
+  reader.readAsDataURL(file);
+}
+function saveProfile() {
+  const nick = document.getElementById('profile-nickname').value.trim();
+  if (!nick) { showToast('Введи никнейм!'); return; }
+  profile.nickname = nick;
+  localStorage.setItem(PROFILE_KEY, JSON.stringify(profile));
+  _applyProfileBtn();
+  showToast('✅ Профиль сохранён!');
+  closeProfile();
+}
+
+// ═══════════════════════════════════════════════════════════
+//  LEADERBOARD — два режима, без сервера:
+//  🌱 Сезон     — монеты, заработанные за текущие сутки. Раз в 24ч сбрасывается
+//                  с раздачей лёгких наград по месту в рейтинге.
+//  🌍 Глобальный — общая сумма заработанных монет за всё время, никогда не сбрасывается.
+//  (Реальный мульти-игровой сервер — следующий шаг, когда будешь готов)
+// ═══════════════════════════════════════════════════════════
+const SEASON_REWARDS = [
+  { coins: 500, crates: 1 }, // 🥇
+  { coins: 250, crates: 0 }, // 🥈
+  { coins: 120, crates: 0 }, // 🥉
+];
+const SEASON_PARTICIPATION_REWARD = 30; // если не попал в топ-3, но играл
+
+// Демо-соперники (т.к. сервера пока нет) — масштабируются под сезон/глобал отдельно
+const LEADERBOARD_GLOBAL_STATIC = [
+  { nickname: 'СадовникМакс',   emoji: '👨‍🌾', coins: 14820 },
+  { nickname: 'РозаНикитина',   emoji: '👩',   coins: 12350 },
+  { nickname: 'ФермерДедушка',  emoji: '👴',   coins: 9870  },
+  { nickname: 'СолнышкоЮля',   emoji: '🌻',   coins: 8140  },
+  { nickname: 'ЗелёныйПалец',  emoji: '🌿',   coins: 6920  },
+  { nickname: 'ЦветочникВася',  emoji: '💐',   coins: 5680  },
+  { nickname: 'БутонМаша',      emoji: '🌹',   coins: 4350  },
+  { nickname: 'ПлодОлег',       emoji: '🍎',   coins: 3100  },
+  { nickname: 'ГрядкаАня',      emoji: '🥕',   coins: 2200  },
+  { nickname: 'КорешокДима',    emoji: '🌱',   coins: 1500  },
+];
+const LEADERBOARD_SEASON_STATIC = [
+  { nickname: 'СадовникМакс',   emoji: '👨‍🌾', coins: 980 },
+  { nickname: 'РозаНикитина',   emoji: '👩',   coins: 740 },
+  { nickname: 'ФермерДедушка',  emoji: '👴',   coins: 560 },
+  { nickname: 'СолнышкоЮля',   emoji: '🌻',   coins: 410 },
+  { nickname: 'ЗелёныйПалец',  emoji: '🌿',   coins: 320 },
+  { nickname: 'ЦветочникВася',  emoji: '💐',   coins: 250 },
+  { nickname: 'БутонМаша',      emoji: '🌹',   coins: 180 },
+  { nickname: 'ПлодОлег',       emoji: '🍎',   coins: 120 },
+  { nickname: 'ГрядкаАня',      emoji: '🥕',   coins: 70  },
+  { nickname: 'КорешокДима',    emoji: '🌱',   coins: 30  },
+];
+
+let lbActiveTab = 'season';
+
+function checkSeasonReset() {
+  if (!state.season.startedAt) { state.season.startedAt = Date.now(); saveState(); return; }
+  const now = Date.now();
+  const elapsed = now - state.season.startedAt;
+  if (elapsed < SEASON_LENGTH_MS) return;
+
+  // Считаем место игрока среди демо-соперников по сезонным монетам
+  const rivals = LEADERBOARD_SEASON_STATIC.map(p => p.coins);
+  const rank = rivals.filter(c => c > state.season.coinsEarned).length; // 0-индексация места
+  let rewardMsg = '';
+  if (rank < SEASON_REWARDS.length) {
+    const r = SEASON_REWARDS[rank];
+    addCoins(r.coins);
+    if (r.crates) state.xpCrates += r.crates;
+    rewardMsg = `🏆 Сезон завершён! Место ${rank+1} — награда: 🪙${r.coins}${r.crates?` + 🪅${r.crates}`:''}`;
+  } else if (state.season.coinsEarned > 0) {
+    addCoins(SEASON_PARTICIPATION_REWARD);
+    rewardMsg = `🌱 Сезон завершён! Награда за участие: 🪙${SEASON_PARTICIPATION_REWARD}`;
+  } else {
+    rewardMsg = `🌱 Новый сезон начался!`;
+  }
+  state.season.coinsEarned = 0;
+  state.season.startedAt = now;
+  saveState(); renderCoins();
+  showToast(rewardMsg);
+}
+
+function openLeaderboard() {
+  lbActiveTab = 'season';
+  document.getElementById('lb-list-overlay').classList.add('open');
+  renderLeaderboard();
+}
+function closeLeaderboard() { document.getElementById('lb-list-overlay').classList.remove('open'); }
+function switchLbTab(tab) {
+  lbActiveTab = tab;
+  document.getElementById('lb-tab-season').classList.toggle('active', tab==='season');
+  document.getElementById('lb-tab-global').classList.toggle('active', tab==='global');
+  renderLeaderboard();
+}
+
+function renderLeaderboard() {
+  const isSeason = lbActiveTab === 'season';
+  const staticList = isSeason ? LEADERBOARD_SEASON_STATIC : LEADERBOARD_GLOBAL_STATIC;
+  const myCoins = isSeason ? state.season.coinsEarned : state.totalCoinsEarned;
+
+  const list = staticList.map(p => ({...p}));
+  const myEntry = { nickname: profile.nickname || 'Вы', emoji: '🌸', avatarDataUrl: profile.avatarDataUrl, coins: myCoins, isMe: true };
+  let myIdx = list.findIndex(p => p.coins <= myEntry.coins);
+  if (myIdx === -1) myIdx = list.length;
+  list.splice(myIdx, 0, myEntry);
+
+  const MEDALS = ['🥇','🥈','🥉'];
+  const ROW_CLS = ['lb-top1','lb-top2','lb-top3'];
+  const RANK_CLS = ['gold','silver','bronze'];
+
+  let html = '';
+  if (isSeason) {
+    html += `
+      <div class="lb-prize-section">
+        <div class="lb-prize-title">🌱 Награды сезона (раз в сутки)</div>
+        <div class="lb-prize-row"><span class="lb-prize-medal">🥇</span><span class="lb-prize-desc">1 место — 🪙${SEASON_REWARDS[0].coins} + 🪅${SEASON_REWARDS[0].crates}</span></div>
+        <div class="lb-prize-row"><span class="lb-prize-medal">🥈</span><span class="lb-prize-desc">2 место — 🪙${SEASON_REWARDS[1].coins}</span></div>
+        <div class="lb-prize-row"><span class="lb-prize-medal">🥉</span><span class="lb-prize-desc">3 место — 🪙${SEASON_REWARDS[2].coins}</span></div>
+        <div class="lb-prize-row"><span class="lb-prize-medal">🌱</span><span class="lb-prize-desc">Участие — 🪙${SEASON_PARTICIPATION_REWARD}</span></div>
+      </div>`;
+  } else {
+    html += `
+      <div class="lb-prize-section">
+        <div class="lb-prize-title">🌍 Глобальный рейтинг</div>
+        <div class="lb-prize-row"><span class="lb-prize-medal">∞</span><span class="lb-prize-desc">Сумма всех заработанных монет за всё время — никогда не сбрасывается</span></div>
+      </div>`;
+  }
+
+  list.forEach((p, i) => {
+    const rank   = i + 1;
+    const rankEl = rank <= 3 ? `<span class="lb-rank ${RANK_CLS[rank-1]}">${MEDALS[rank-1]}</span>` : `<span class="lb-rank">${rank}</span>`;
+    const rowCls = (p.isMe ? 'lb-me ' : '') + (rank <= 3 ? ROW_CLS[rank-1] : '');
+    const avHtml = p.avatarDataUrl
+      ? `<div class="lb-avatar-circle"><img src="${p.avatarDataUrl}" alt=""></div>`
+      : `<div class="lb-avatar-circle">${p.emoji || '🌸'}</div>`;
+    const badge = p.isMe ? '<span class="lb-me-badge">ВЫ</span>' : '';
+    html += `
+      <div class="lb-player-row ${rowCls}">
+        ${rankEl}
+        ${avHtml}
+        <div class="lb-player-info">
+          <div class="lb-player-name">${p.nickname}</div>
+          <div class="lb-player-coins">🪙 ${p.coins.toLocaleString('ru-RU')}</div>
+        </div>
+        ${badge}
+      </div>`;
+  });
+  html += `<div class="lb-offline-note">⚠️ Пока офлайн-демо: видны только ты и тестовые соперники</div>`;
+
+  document.getElementById('lb-list-body').innerHTML = html;
+  document.getElementById('lb-last-updated').textContent = isSeason ? 'Сезонный рейтинг' : 'Рейтинг за всё время';
+
+  const left = Math.max(0, SEASON_LENGTH_MS - (Date.now() - (state.season.startedAt||Date.now())));
+  document.getElementById('lb-season-timer').textContent = isSeason ? `⏳ Сброс сезона через: ${fmtMs(left)}` : '';
+}
+
+// ═══════════════════════════════════════════════════════════
+//  INIT
+// ═══════════════════════════════════════════════════════════
+function init() {
+  loadState();
+
+  const hasAny = Object.keys(state.inventory).some(k=>(k.startsWith('seed_')||PLANTS[k])&&state.inventory[k]>0);
+  const noProgress = state.coins===0 && !state.fields[0].plots.some(p=>p);
+  if (!hasAny && noProgress) {
+    state.inventory['seed_carrot']  = 9;
+    state.inventory['tool_water']   = 3;
+    state.inventory['tool_shovel']  = 1;
+  }
+  state.inventory['tool_water']  ||= 3;
+  state.inventory['tool_shovel'] ||= 1;
+
+  normalizeField(0); normalizeField(1);
+  maybeRefreshShop();
+  maybeRefreshQuests();
+  ensureQuestRerollDay();
+  maybeRefreshWheelSlots();
+  if (!state.wheel.lastRegenAt) state.wheel.lastRegenAt = Date.now();
+
+  if (!state.compensation.deadline) {
+    state.compensation.deadline = Date.now() + 48*3600*1000;
+  }
+  if (!state.season.startedAt) state.season.startedAt = Date.now();
+  if (state.totalCoinsEarned < state.coins) state.totalCoinsEarned = state.coins;
+
+  saveState();
+
+  buildGardenDOM(); markAllDirty();
+  renderInventory(); renderTools(); renderCoins(); renderAutoSellUI(); tickClock();
+  updateFieldTabsUI(); updateQuestsFabBadge();
+  currentWeather = getWeatherState(); renderWeatherUI();
+  loadProfile();
+
+  document.querySelectorAll('.overlay-backdrop').forEach(el =>
+    el.addEventListener('click', function(e){ if(e.target===this) closeOverlay(this.id); })
+  );
+  document.getElementById('sell-overlay').addEventListener('click', function(e){ if(e.target===this) closeSellPopup(); });
+  document.getElementById('lb-open-overlay').addEventListener('click', function(e){ if(e.target===this) closeLootboxPopup(); });
+
+  if (!localStorage.getItem('bloom_patch_05_1')) {
+    setTimeout(() => openOverlay('patch-overlay'), 700);
+    localStorage.setItem('bloom_patch_05_1', '1');
+  }
+
+  requestAnimationFrame(gameLoop);
+  showToast('🌸 Bloom v0.5! 🌱 Garden Pass — слева, 🎡💠 — в Магазине');
+}
+
+init();
+</script>
+</body>
+</html>
